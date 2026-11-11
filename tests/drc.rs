@@ -288,3 +288,60 @@ fn writing_is_forgiving_and_errors_help() {
             .contains("un seul Dockerfile")
     );
 }
+
+#[test]
+fn custom_ports_for_several_apps() {
+    let files = drc::compile_str(
+        r#"
+        front { image = "nginx:1.29", port = 8080 }          # nginx écoute sur 80
+        api   { image = "acme/api:2", port = "3001:3000" }
+        proxy { image = "acme/proxy:1", ports = [80, "8443:443"] }
+        db    { image = "postgres:18-alpine" }
+        "#,
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("  front:\n    image: nginx:1.29\n    ports:\n      - \"8080:80\"\n"));
+    assert!(compose.contains("      - \"3001:3000\"\n"));
+    assert!(compose.contains(
+        "  proxy:\n    image: acme/proxy:1\n    ports:\n      - \"80:80\"\n      - \"8443:443\"\n"
+    ));
+    assert!(compose.contains("      - \"5432:5432\"\n"));
+
+    let deployment = file(&files, "deployment.yaml");
+    assert!(deployment.contains(
+        "          image: nginx:1.29\n          ports:\n            - containerPort: 80\n"
+    ));
+    assert!(
+        deployment.contains("            - containerPort: 80\n            - containerPort: 443\n")
+    );
+
+    let services = file(&files, "service.yaml");
+    assert!(services.contains("  name: front\nspec:\n  selector:\n    app: front\n  ports:\n    - port: 8080\n      targetPort: 80\n"));
+    assert!(services.contains("    - port: 3001\n      targetPort: 3000\n"));
+    // Plusieurs ports : chacun a un nom, comme Kubernetes l'exige.
+    assert!(services.contains("    - name: p80\n      port: 80\n      targetPort: 80\n    - name: p8443\n      port: 8443\n      targetPort: 443\n"));
+}
+
+#[test]
+fn port_mistakes_are_caught() {
+    let collision =
+        error("a { image = \"nginx:1.29\" }\nb {\n  image = \"nginx:1.29\"\n  port = 80\n}");
+    assert_eq!(
+        collision,
+        "main.drc:4:3 : `b` : le port 80 est déjà publié par `a` ; choisissez un autre port public, par exemple `port = \"81:80\"`"
+    );
+    assert!(
+        error("a { image = \"x:1\", port = \"80:abc\" }")
+            .contains("`80:abc` n'est pas un port valide")
+    );
+    assert!(error("a { image = \"x:1\", port = 70000 }").contains("entre 1 et 65535"));
+    assert!(error("a { image = \"x:1\", port = 80, ports = [81] }").contains("pas les deux"));
+    assert!(error("a { image = \"x:1\", ports = 80 }").contains("`ports` est une liste"));
+    assert!(error("a { image = \"x:1\", ports = [80, \"80:81\"] }").contains("publié deux fois"));
+    // Deux nginx sans port : le second doit choisir.
+    assert!(
+        error("a { image = \"nginx:1.29\" }\nb { image = \"nginx:1.29\" }")
+            .contains("déjà publié par `a`")
+    );
+}

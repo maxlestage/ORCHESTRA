@@ -1,0 +1,6 @@
+# Des ports au choix, pour plusieurs applications.
+
+front { image = "nginx:1.29", port = 8080 }       # publié sur 8080 (nginx écoute sur 80)
+api   { image = "ghcr.io/acme/api:2", port = "3001:3000" }
+proxy { image = "ghcr.io/acme/proxy:1", ports = [80, "8443:443"] }
+db    { image = "postgres:18-alpine" }            # 5432, déduit

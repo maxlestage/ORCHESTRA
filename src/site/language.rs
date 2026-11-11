@@ -118,7 +118,8 @@ fn objective() -> Vec<Node> {
 fn apps() -> Vec<Node> {
     let keys: Vec<Vec<String>> = [
         ("image", "texte", "L'image du conteneur. Obligatoire, sauf avec <code>build</code>."),
-        ("port", "nombre", "Le port de l'application : publié par Compose, un Service Kubernetes. Déduit pour les images courantes (nginx 80, postgres 5432, redis 6379…) ; <code>false</code> pour aucun."),
+        ("port", "nombre ou texte", "<code>3000</code> : le même dehors et dedans. <code>\"8080:80\"</code> : publié sur 8080, l'application écoute sur 80. Déduit pour les images courantes (nginx 80, postgres 5432, redis 6379…), où un nombre seul est le port public : <code>port = 8080</code> publie nginx sur 8080. <code>false</code> pour aucun."),
+        ("ports", "liste", "Plusieurs ports : <code>[80, \"8443:443\"]</code>. Deux applications ne peuvent pas publier le même port : le compilateur le refuse et en propose un libre."),
         ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app). Un autre texte : le dossier de construction Compose."),
         ("replicas", "nombre", "Le nombre d'instances Kubernetes (1 par défaut)."),
         ("env", "objet", "Les variables d'environnement : <code>{ CLE = \"valeur\" }</code>."),
