@@ -3,7 +3,7 @@
 //!     cargo run                                   # le site, http://localhost:3000
 //!     cargo run -- build app.drc --out generated  # écrit Dockerfile, compose, manifests
 //!     cargo run -- check app.drc                  # vérifie sans rien écrire
-//!     cargo run -- export dist --base /ORCHESTRA  # le site en fichiers statiques (GitHub Pages)
+//!     cargo run -- export dist                    # le site en fichiers statiques (GitHub Pages)
 
 mod site;
 
@@ -48,8 +48,8 @@ Usage :
   orchestra build <fichier.drc> [--out <dossier>]
                                     écrit Dockerfile, docker-compose.yml et les manifests
   orchestra check <fichier.drc>     vérifie le fichier sans rien écrire
-  orchestra export <dossier> [--base /ORCHESTRA] [--wasm orchestra.wasm]
-                                    le site en fichiers statiques (GitHub Pages)";
+  orchestra export <dossier>        le site en fichiers statiques (GitHub Pages)
+                                    options : --base /chemin, --wasm fichier.wasm";
 
 fn cli(args: &[String], write: bool) -> ExitCode {
     let mut input = None;
@@ -101,10 +101,11 @@ fn cli(args: &[String], write: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `orchestra export <dossier>` ; la base vient aussi de `BASE_PATH`.
+/// `orchestra export <dossier>`. Dans GitHub Actions, le chemin du site (`/ORCHESTRA`)
+/// est déduit du dépôt ; `--base` le remplace.
 fn export(args: &[String]) -> ExitCode {
     let mut out = None;
-    let mut base = std::env::var("BASE_PATH").unwrap_or_default();
+    let mut base = site::export::default_base(std::env::var("GITHUB_REPOSITORY").ok().as_deref());
     let mut wasm = PathBuf::from(site::export::WASM);
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -142,7 +143,7 @@ fn export(args: &[String]) -> ExitCode {
             println!("✓ {} fichier(s) dans {}", report.files, out.display());
             if !report.wasm {
                 eprintln!(
-                    "attention : {} absent, le bac à sable ne compilera pas en ligne\n  cargo build --lib --target wasm32-unknown-unknown --profile wasm",
+                    "attention : {} absent, le bac à sable ne compilera pas en ligne (lancez d'abord `cargo wasm`)",
                     wasm.display()
                 );
             }

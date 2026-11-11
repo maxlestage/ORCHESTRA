@@ -1,11 +1,4 @@
-# Déploie le site sur GitHub Pages à chaque mise à jour de master (et à la demande).
-#
-# GitHub Pages ne sert que des fichiers : `orchestra export` écrit chaque page du site
-# Paquets en HTML statique, et le compilateur Rust-Compose est compilé en WebAssembly
-# (orchestra.wasm) pour que le bac à sable compile dans le navigateur.
-#
-# Une seule fois, dans le dépôt : Settings → Pages → Build and deployment →
-# Source : « GitHub Actions ».
+# Publie le site sur GitHub Pages à chaque mise à jour de master. Rien à configurer.
 
 name: GitHub Pages
 
@@ -19,49 +12,20 @@ permissions:
   pages: write
   id-token: write
 
-# Un déploiement à la fois ; celui en cours va jusqu'au bout.
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
-env:
-  CARGO_TERM_COLOR: always
-  # Les dépendances git (Paquets et ses paquets) se lisent avec le secret REPOS_TOKEN
-  # s'il existe (dépôts privés) ; sans lui, rien ne change.
-  REPOS_TOKEN: ${{ secrets.REPOS_TOKEN }}
-  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  GIT_CONFIG_COUNT: ${{ secrets.REPOS_TOKEN != '' && 1 || 0 }}
-  GIT_CONFIG_KEY_0: credential.https://github.com.helper
-  GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && echo username=x-access-token && echo "password=$REPOS_TOKEN"; }; f'
-
 jobs:
-  build:
-    name: Export statique
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      # Donne le chemin du site (`/ORCHESTRA`, ou rien avec un domaine personnalisé).
-      - id: pages
-        uses: actions/configure-pages@v6
-      - name: Compilateur du navigateur (orchestra.wasm)
-        run: cargo build --locked --lib --target wasm32-unknown-unknown --profile wasm
-      - name: Pages HTML
-        run: cargo run --locked -- export dist --base "${{ steps.pages.outputs.base_path }}"
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: dist
-
   deploy:
-    name: Déploiement
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo wasm && cargo run -- export dist
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v5

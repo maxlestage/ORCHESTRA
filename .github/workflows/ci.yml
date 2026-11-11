@@ -15,13 +15,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Les dépendances git (Paquets et ses paquets) se lisent avec le secret REPOS_TOKEN
-  # s'il existe (dépôts privés) ; sans lui, rien ne change.
-  REPOS_TOKEN: ${{ secrets.REPOS_TOKEN }}
-  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
-  GIT_CONFIG_COUNT: ${{ secrets.REPOS_TOKEN != '' && 1 || 0 }}
-  GIT_CONFIG_KEY_0: credential.https://github.com.helper
-  GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && echo username=x-access-token && echo "password=$REPOS_TOKEN"; }; f'
 
 jobs:
   rust:
@@ -98,10 +91,4 @@ jobs:
       - name: Déploiement sur GitHub Pages
         env:
           GH_TOKEN: ${{ github.token }}
-        # Un workflow tout juste arrivé sur master peut mettre quelques secondes à être connu.
-        run: |
-          for attempt in 1 2 3 4 5; do
-            gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY" && exit 0
-            sleep $((attempt * 5))
-          done
-          exit 1
+        run: gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"
