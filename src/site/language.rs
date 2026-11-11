@@ -10,6 +10,7 @@ const TOC: &[(&str, &str)] = &[
     ("objectif", "Objectif et principes"),
     ("app", "L'essentiel : app"),
     ("pile", "Un site web : une pile"),
+    ("versions", "Versions et variantes"),
     ("structure", "Structure du projet"),
     ("syntaxe", "Syntaxe générale"),
     ("docker", "Section docker"),
@@ -43,6 +44,7 @@ pub async fn page(_req: Request) -> Page {
         .children(objective())
         .children(apps())
         .children(stack())
+        .children(versions())
         .children(structure())
         .children(syntax())
         .children(docker())
@@ -213,6 +215,50 @@ fn stack() -> Vec<Node> {
             ]),
         ),
         table(&["Option", "Rôle"], &options),
+    ]
+}
+
+fn versions() -> Vec<Node> {
+    vec![
+        h2_id("versions", "Versions et variantes"),
+        para("Rien n'est deviné : la version et la variante s'écrivent là où l'image est nommée."),
+        table(
+            &["Où", "Vous écrivez", "Image"],
+            &rows(&[
+                &[
+                    "Une application",
+                    "<code>image = \"postgres:18-alpine\"</code>",
+                    "<code>postgres:18-alpine</code>",
+                ],
+                &[
+                    "Une application",
+                    "<code>image = \"postgres\"</code>, <code>version = \"18-alpine\"</code>",
+                    "<code>postgres:18-alpine</code>",
+                ],
+                &[
+                    "Une pile",
+                    "<code>postgres = \"18-alpine\"</code>, <code>nginx = \"1.29-alpine\"</code>",
+                    "<code>postgres:18-alpine</code>, <code>nginx:1.29-alpine</code>",
+                ],
+                &[
+                    "Du code Rust (pile)",
+                    "<code>rust = \"1.99-slim-bookworm\"</code>",
+                    "construit avec <code>rust:1.99-slim-bookworm</code>, tourne sur <code>debian:bookworm-slim</code>",
+                ],
+                &[
+                    "Du code Rust (application)",
+                    "<code>build = \"rust:1.99-alpine\"</code>",
+                    "construit avec <code>rust:1.99-alpine</code>, tourne sur <code>alpine:3.24</code>",
+                ],
+            ]),
+        ),
+        para(
+            "Pour garder toutes les versions au même endroit, mettez-les dans des variables en haut du fichier (ou dans un fichier importé), puis choisissez-les au besoin à la compilation :",
+        ),
+        drc(
+            "API = \"2.1.0\"\n\napi { image = \"ghcr.io/acme/api\", version = API, port = 3000 }\ndb  { image = \"postgres\", version = \"18-alpine\" }",
+        ),
+        shell_block("$ orchestra build app.drc --out deploy --set API=2.2.0").into(),
     ]
 }
 
@@ -409,7 +455,7 @@ fn kubernetes() -> Vec<Node> {
         })
         .collect();
     vec![
-        h2_id("k8s", "6. Section k8s"),
+        h2_id("k8s", "Section k8s"),
         drc(r#"k8s {
     deployment = {
         name = "myapp-deploy"
@@ -535,6 +581,7 @@ fn checks() -> Vec<Node> {
                 "les directives : une clé inconnue de <code>docker</code>, <code>compose</code> ou <code>k8s</code> est une erreur (pas une faute de frappe silencieuse) ;",
                 "les éléments obligatoires : <code>docker.base</code>, <code>compose.services</code> avec une image ou un build par service, le <code>name</code> de chaque ressource, l'<code>image</code> de chaque conteneur, les <code>ports</code> d'un Service ;",
                 "les types et les valeurs : ports entre 1 et 65535, nombre de réplicas, noms Kubernetes valides, type de Service ;",
+                "la cohérence : un port public pris deux fois, deux conteneurs d'un pod sur le même port, une version écrite deux fois, une dépendance vers une application inconnue, deux bases qui donneraient la même <code>DATABASE_URL</code> ;",
                 "les limites : récursion infinie, imbrication excessive, programme qui produirait trop de données.",
             ]
             .into_iter()
@@ -554,9 +601,9 @@ fn cli() -> Vec<Node> {
         para("L'outil Rust <code>orchestra</code> lit le fichier <code>.drc</code>, valide la syntaxe, remplace les variables, exécute les fonctions, puis écrit :"),
         ul().children(
             [
-                "<code>Dockerfile</code>, si la section <code>docker</code> est présente ;",
-                "<code>docker-compose.yml</code>, si la section <code>compose</code> est présente ;",
-                "<code>deployment.yaml</code>, <code>service.yaml</code>, <code>configmap.yaml</code>… si <code>k8s</code> est présente.",
+                "<code>Dockerfile</code>, pour du code Rust (<code>rust</code>, <code>build = \"rust\"</code>) ou une section <code>docker</code> ;",
+                "<code>docker-compose.yml</code>, avec tous les services ;",
+                "<code>deployment.yaml</code>, <code>service.yaml</code>, <code>statefulset.yaml</code>, <code>secret.yaml</code>… : un fichier par type de ressource Kubernetes.",
             ]
             .into_iter()
             .map(|item| li().html(item)),
@@ -567,6 +614,7 @@ fn cli() -> Vec<Node> {
         )
         .into(),
         para("Les fichiers générés respectent les conventions Docker et Kubernetes et s'utilisent directement avec <code>docker build</code>, <code>docker compose up</code> ou <code>kubectl apply -f</code>."),
+        para("<code>orchestra export dist</code> écrit ce site en fichiers statiques (c'est ainsi qu'il est publié sur GitHub Pages, avec le compilateur en WebAssembly : <code>cargo wasm</code>)."),
         para("<code>--set NOM=valeur</code> remplace une variable du fichier au moment de compiler, sans le modifier : pratique en intégration continue pour déployer la version qui vient d'être construite. La valeur garde le type de la variable (<code>--set REPLICAS=5</code> reste un nombre, <code>--set API=1.10</code> reste un texte), et un nom inconnu est une erreur."),
         shell_block("$ orchestra build app.drc --out deploy --set API=2.2.0 --set REPLICAS=5").into(),
     ]

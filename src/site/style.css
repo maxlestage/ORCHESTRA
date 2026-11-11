@@ -283,6 +283,9 @@ section { padding-block: 3rem; }
 .card:hover { transform: translateY(-4px); border-color: var(--rust); }
 .card h3 { font-size: 1.1rem; margin-top: .75rem; }
 .card p { margin: 0; color: var(--muted); font-size: .95rem; }
+.cheat { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+.cheat h3 { margin: 0; }
+.cheat .code { margin: 0; font-size: .8rem; }
 .icon { width: 2.4rem; height: 2.4rem; fill: none; stroke: var(--rust); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .card:nth-child(2) .icon { stroke: var(--docker); }
 .card:nth-child(3) .icon { stroke: var(--compose); }

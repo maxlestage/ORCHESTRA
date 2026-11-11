@@ -16,6 +16,7 @@ pub async fn page(_req: Request) -> Page {
             Node::from(principles()),
             Node::from(demo()),
             Node::from(web()),
+            Node::from(cheats()),
             Node::from(cli()),
         ]),
     )
@@ -191,14 +192,84 @@ fn live(
     )
 }
 
+/// L'aide-mémoire : un besoin, la ligne à écrire, ce qu'elle donne.
+const CHEATS: &[(&str, &str, &str)] = &[
+    (
+        "Une application",
+        r#"web { image = "nginx:1.29" }"#,
+        "Service Compose, Deployment et Service Kubernetes. Le port des images courantes est déduit (80 pour nginx).",
+    ),
+    (
+        "Un site complet",
+        r#"web { rust = ".", nginx = "1.29", postgres = "18", redis = "8" }"#,
+        "nginx devant votre code, <code>DATABASE_URL</code> et <code>REDIS_URL</code> fournies, données gardées, mot de passe dans un Secret.",
+    ),
+    (
+        "La variante",
+        r#"web { rust = "1.99-alpine", postgres = "18-alpine" }"#,
+        "La valeur est le tag. Pour Rust, l'image d'exécution de la même famille suit : alpine, bookworm…",
+    ),
+    (
+        "La version à part",
+        r#"db { image = "postgres", version = "18" }"#,
+        "La même chose que <code>postgres:18</code>, pratique avec une variable : <code>version = API</code>.",
+    ),
+    (
+        "Les ports",
+        r#"web { image = "nginx:1.29", port = "8080:80" }"#,
+        "Publié sur 8080, l'application écoute sur 80. Plusieurs : <code>ports = [80, \"8443:443\"]</code>.",
+    ),
+    (
+        "Un nom de domaine",
+        r#"web { image = "nginx:1.29", host = "monsite.fr" }"#,
+        "Un Ingress Kubernetes vers l'application.",
+    ),
+    (
+        "Plusieurs conteneurs",
+        r#"api { image = "acme/api:2", with = { proxy = { image = "envoyproxy/envoy:v1.36" } } }"#,
+        "Dans le même pod Kubernetes ; dans Compose, sur le même réseau que l'application.",
+    ),
+    (
+        "Une valeur réutilisée",
+        "VERSION = \"2.1.0\"\nfn image(n) = \"ghcr.io/acme/\" + n + \":\" + VERSION\napi { image = image(\"api\") }",
+        "Une variable, une fonction d'une ligne, <code>+</code> pour assembler.",
+    ),
+];
+
+fn cheats() -> Element {
+    let cards = CHEATS.iter().map(|(title, source, effect)| {
+        article()
+            .class("card cheat reveal")
+            .child(h3().text(*title))
+            .child(code_block("aide.drc", source))
+            .child(p().html(*effect))
+    });
+    section().id("aide-memoire").child(
+        div()
+            .class("wrap")
+            .child(span().class("eyebrow").text("Aide-mémoire"))
+            .child(h2().class("section-title").text("Un besoin, une ligne"))
+            .child(p().class("lead").html(
+                "Tout ce que l'on écrit le plus souvent. Les fautes de frappe sont signalées avec leur correction, à la ligne et à la colonne près.",
+            ))
+            .child(div().class("cards cheats").children(cards))
+            .child(
+                div()
+                    .class("actions")
+                    .child(a().class("btn primary").href("/bac-a-sable").text("Essayer"))
+                    .child(a().class("btn").href("/langage").text("Toute la spécification")),
+            ),
+    )
+}
+
 fn cli() -> Element {
     let lines = [
-        "$ orchestra build app.drc --out deploy",
+        "$ orchestra build app.drc --out deploy --set API=2.2.0",
         "✓ deploy/Dockerfile",
         "✓ deploy/docker-compose.yml",
-        "✓ deploy/service.yaml",
-        "$ kubectl apply -f deploy/service.yaml",
-        "service/myapp created",
+        "✓ deploy/deployment.yaml",
+        "$ kubectl apply -f deploy/",
+        "deployment.apps/web created",
     ];
     let html: String = lines
         .iter()
@@ -217,7 +288,7 @@ fn cli() -> Element {
             .child(span().class("eyebrow").text("En ligne de commande"))
             .child(h2().class("section-title").text("Un binaire, trois commandes"))
             .child(p().class("lead").html(
-                "<code>orchestra</code> lance ce site, <code>orchestra check</code> vérifie un fichier, <code>orchestra build</code> écrit les fichiers.",
+                "<code>orchestra check</code> vérifie un fichier, <code>orchestra build</code> écrit les fichiers (<code>--set</code> choisit une version au passage), <code>orchestra</code> seul lance ce site.",
             ))
             .child(
                 div()
@@ -229,4 +300,16 @@ fn cli() -> Element {
             )
             .child(div().class("actions").child(a().class("btn").href("/langage#cli").text("Installer l'outil"))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_cheat_compiles() {
+        for (title, source, _) in super::CHEATS {
+            if let Err(e) = orchestra::drc::compile_str(source) {
+                panic!("{title} : {e}");
+            }
+        }
+    }
 }
