@@ -98,4 +98,10 @@ jobs:
       - name: Déploiement sur GitHub Pages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"
+        # Un workflow tout juste arrivé sur master peut mettre quelques secondes à être connu.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY" && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
