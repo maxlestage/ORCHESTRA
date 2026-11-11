@@ -13,6 +13,7 @@
 //! assert!(files[0].content.contains("image: myapp:latest"));
 //! ```
 
+mod apps;
 mod eval;
 mod generate;
 pub mod lexer;
@@ -102,6 +103,47 @@ impl Value {
     }
 }
 
+/// ` (vouliez-vous dire `x` ?)` quand `word` ressemble à l'un des `candidates`.
+pub(crate) fn suggest<'a>(word: &str, candidates: impl IntoIterator<Item = &'a str>) -> String {
+    // Au plus une faute pour trois lettres, et jamais tout le mot (`C` ne suggère pas `A`).
+    let length = word.chars().count();
+    let limit = (length / 3).max(1).min(length.saturating_sub(1));
+    candidates
+        .into_iter()
+        .filter(|c| *c != word)
+        .map(|c| (distance(&word.to_lowercase(), &c.to_lowercase()), c))
+        .filter(|(d, _)| *d <= limit)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| format!(" (vouliez-vous dire `{c}` ?)"))
+        .unwrap_or_default()
+}
+
+/// La distance d'édition entre deux mots (insertions, suppressions, substitutions et
+/// inversions de deux lettres voisines).
+fn distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut d = vec![vec![0usize; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in d[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            d[i][j] = (d[i - 1][j] + 1)
+                .min(d[i][j - 1] + 1)
+                .min(d[i - 1][j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                d[i][j] = d[i][j].min(d[i - 2][j - 2] + 1);
+            }
+        }
+    }
+    d[a.len()][b.len()]
+}
+
 /// Un fichier généré.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedFile {
@@ -127,13 +169,15 @@ pub fn compile(
 ) -> Result<Vec<GeneratedFile>, Error> {
     let mut evaluator = eval::Evaluator::new(resolver);
     evaluator.file(name, source)?;
-    let sections = std::mem::take(&mut evaluator.sections);
-    if sections.is_empty() {
+    let apps = std::mem::take(&mut evaluator.apps);
+    let explicit = std::mem::take(&mut evaluator.sections);
+    if apps.is_empty() && explicit.is_empty() {
         return Err(Error::at(
             Pos { line: 1, col: 1 },
-            "aucune section : ajoutez `docker { … }`, `compose { … }` ou `k8s { … }`",
+            "rien à générer : ajoutez une application (`app web { image = \"nginx:1.29\", port = 80 }`) ou une section `docker`, `compose` ou `k8s`",
         )
         .in_file(name));
     }
+    let sections = apps::expand(&apps, explicit).map_err(|e| e.in_file(name))?;
     generate::files(&sections).map_err(|e| e.in_file(name))
 }

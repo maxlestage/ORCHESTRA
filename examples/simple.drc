@@ -1,0 +1,7 @@
+# Le plus simple : une application, quatre lignes.
+# → docker-compose.yml, deployment.yaml, service.yaml
+
+app web {
+    image = "nginx:1.29"
+    port = 80
+}

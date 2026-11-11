@@ -174,12 +174,13 @@ mod tests {
         // L'exemple de l'accueil est compilé à chaque rendu.
         let home = client.get("/").await.text();
         assert!(home.contains("docker-compose.yml"));
-        assert!(home.contains("image: myapp:latest") || home.contains("myapp:latest"));
+        assert!(home.contains("nginx:1.29"));
+        assert!(home.contains("deployment.yaml"));
 
         // Le formulaire du bac à sable.
         let res = client
             .post("/bac-a-sable")
-            .form(&json!({ "source": examples::ALL[0].source }))
+            .form(&json!({ "source": include_str!("../../examples/complet.drc") }))
             .await;
         assert_eq!(res.status(), 200);
         assert!(res.text().contains("5 fichier(s) générés"));

@@ -8,6 +8,7 @@ use super::{code_block, layout, shell_block};
 /// Le sommaire : (ancre, titre).
 const TOC: &[(&str, &str)] = &[
     ("objectif", "Objectif et principes"),
+    ("app", "L'essentiel : app"),
     ("structure", "Structure du projet"),
     ("syntaxe", "Syntaxe générale"),
     ("docker", "Section docker"),
@@ -39,6 +40,7 @@ pub async fn page(_req: Request) -> Page {
             "Un format lisible et compilable par un outil Rust, qui génère à la fois le <code>Dockerfile</code>, le <code>docker-compose.yml</code> et les manifests Kubernetes (Deployment, Service, ConfigMap…).",
         ))
         .children(objective())
+        .children(apps())
         .children(structure())
         .children(syntax())
         .children(docker())
@@ -96,7 +98,7 @@ fn rows(data: &[&[&str]]) -> Vec<Vec<String>> {
 
 fn objective() -> Vec<Node> {
     vec![
-        h2_id("objectif", "1. Objectif et principes"),
+        h2_id("objectif", "Objectif et principes"),
         para("Rust‑Compose fournit un format lisible et compilable par un outil Rust, qui génère à la fois des Dockerfile, des <code>docker-compose.yml</code> et des manifests Kubernetes."),
         ol().children(
             [
@@ -113,9 +115,38 @@ fn objective() -> Vec<Node> {
     ]
 }
 
+fn apps() -> Vec<Node> {
+    let keys: Vec<Vec<String>> = [
+        ("image", "texte", "L'image du conteneur. Obligatoire, sauf avec <code>build</code>."),
+        ("port", "nombre", "Le port de l'application : publié par Compose, un Service Kubernetes."),
+        ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app). Un autre texte : le dossier de construction Compose."),
+        ("replicas", "nombre", "Le nombre d'instances Kubernetes (1 par défaut)."),
+        ("env", "objet", "Les variables d'environnement : <code>{ CLE = \"valeur\" }</code>."),
+        ("command", "texte ou liste", "La commande lancée à la place de celle de l'image."),
+        ("volumes", "liste", "Des volumes Compose : <code>[\"./data:/data\"]</code>."),
+        ("depends_on", "liste", "Les applications à démarrer avant (Compose)."),
+        ("host", "texte", "Un nom de domaine : un Ingress Kubernetes vers le port."),
+    ]
+    .iter()
+    .map(|(key, kind, role)| vec![format!("<code>{key}</code>"), (*kind).to_owned(), (*role).to_owned()])
+    .collect();
+    vec![
+        h2_id("app", "L'essentiel : app"),
+        para("Une application s'écrit en quatre lignes. Le compilateur en déduit le service Compose, le Deployment et le Service Kubernetes, avec leurs labels et leur selector :"),
+        drc("app web {\n    image = \"nginx:1.29\"\n    port = 80\n}"),
+        para("Plusieurs applications, un Dockerfile Rust, un nom de domaine :"),
+        drc(include_str!("../../examples/boutique.drc")),
+        table(&["Clé", "Type", "Rôle"], &keys),
+        blockquote().child(p().html(
+            "Besoin d'un réglage que <code>app</code> ne prévoit pas ? Ajoutez une section <code>docker</code>, <code>compose</code> ou <code>k8s</code> à côté : elle complète ce que les applications génèrent.",
+        ))
+        .into(),
+    ]
+}
+
 fn structure() -> Vec<Node> {
     vec![
-        h2_id("structure", "2. Structure du projet"),
+        h2_id("structure", "Structure du projet"),
         pre().class("code tree").child(code().text(
             "project/\n├── docker/\n│   └── app.drc          ← fichier Rust-Compose Docker\n├── k8s/\n│   └── deployment.drc   ← fichier Rust-Compose Kubernetes\n├── config.drc           ← variables globales, fonctions\n├── docker-compose.yml   ← généré\n├── Dockerfile           ← généré\n└── deployment.yaml      ← généré",
         ))
@@ -129,7 +160,7 @@ fn structure() -> Vec<Node> {
 
 fn syntax() -> Vec<Node> {
     vec![
-        h2_id("syntaxe", "3. Syntaxe générale"),
+        h2_id("syntaxe", "Syntaxe générale"),
         para(
             "Un mélange de TOML (pour les sections) et de YAML (pour les blocs imbriqués). Chaque fichier peut commencer par l'en-tête facultatif <code># Rust-Compose 1.0</code>.",
         ),
@@ -217,7 +248,7 @@ fn syntax() -> Vec<Node> {
 
 fn docker() -> Vec<Node> {
     vec![
-        h2_id("docker", "4. Section docker"),
+        h2_id("docker", "Section docker"),
         drc(r#"docker {
     base = "rust:1.99-slim"          # image de construction (FROM)
     workdir = "/app"                 # WORKDIR
@@ -260,7 +291,7 @@ fn docker() -> Vec<Node> {
 
 fn compose() -> Vec<Node> {
     vec![
-        h2_id("compose", "5. Section compose"),
+        h2_id("compose", "Section compose"),
         drc(r#"compose {
     services = {
         web = {
@@ -382,13 +413,11 @@ fn functions() -> Vec<Node> {
     ]];
     all.extend(builtins);
     vec![
-        h2_id("fonctions", "7. Variables globales et fonctions"),
+        h2_id("fonctions", "Variables globales et fonctions"),
         drc(r#"var IMAGE_NAME = "myapp"
 var VERSION = "1.0.0"
 
-fn image_tag(tag) {
-    return format!("{}:{}", IMAGE_NAME, tag)
-}
+fn image_tag(tag) = IMAGE_NAME + ":" + tag      # une fonction d'une ligne
 
 fn image_for(env) {
     var suffix = lower(env)          # variable locale
@@ -403,7 +432,7 @@ fn image_for(env) {
 
 fn modules() -> Vec<Node> {
     vec![
-        h2_id("modules", "8. Modules et imports"),
+        h2_id("modules", "Modules et imports"),
         drc(r#"# docker/app.drc
 import "../config.drc"      # chemin relatif au fichier qui importe
 
@@ -419,11 +448,12 @@ docker {
 
 fn checks() -> Vec<Node> {
     vec![
-        h2_id("verifications", "9. Vérifications"),
+        h2_id("verifications", "Vérifications"),
         para("Le compilateur refuse un fichier incorrect avant d'écrire quoi que ce soit, en donnant le fichier, la ligne et la colonne :"),
         ul().children(
             [
                 "la syntaxe : accolades, crochets, guillemets, clés en double ;",
+                "les fautes de frappe : une variable, une clé ou une application mal écrite reçoit sa correction (<em>vouliez-vous dire `image` ?</em>) ;",
                 "les noms : variable ou fonction inconnue, nombre d'arguments, mots réservés ;",
                 "les directives : une clé inconnue de <code>docker</code>, <code>compose</code> ou <code>k8s</code> est une erreur (pas une faute de frappe silencieuse) ;",
                 "les éléments obligatoires : <code>docker.base</code>, <code>compose.services</code> avec une image ou un build par service, le <code>name</code> de chaque ressource, l'<code>image</code> de chaque conteneur, les <code>ports</code> d'un Service ;",
@@ -435,7 +465,7 @@ fn checks() -> Vec<Node> {
         )
         .into(),
         pre().class("code").child(code().html(
-            "<span class=\"t-comment\">$ orchestra check app.drc</span>\nerreur : app.drc:12:9 : variable inconnue `IMAGE` ",
+            "<span class=\"t-comment\">$ orchestra check app.drc</span>\nerreur : app.drc:2:5 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)",
         ))
         .into(),
     ]
@@ -443,7 +473,7 @@ fn checks() -> Vec<Node> {
 
 fn cli() -> Vec<Node> {
     vec![
-        h2_id("cli", "10. Compilation et génération"),
+        h2_id("cli", "Compilation et génération"),
         para("L'outil Rust <code>orchestra</code> lit le fichier <code>.drc</code>, valide la syntaxe, remplace les variables, exécute les fonctions, puis écrit :"),
         ul().children(
             [
@@ -465,7 +495,7 @@ fn cli() -> Vec<Node> {
 
 fn api() -> Vec<Node> {
     vec![
-        h2_id("api", "11. API HTTP"),
+        h2_id("api", "API HTTP"),
         para("Le serveur expose le compilateur : envoyez un fichier, recevez les fichiers générés (ou l'erreur, avec un statut 422). Sur la version GitHub Pages, sans serveur, le bac à sable compile dans le navigateur avec le même compilateur, en WebAssembly."),
         shell_block(
             "$ curl -s https://<votre-site>/api/compile \\\n    -H 'content-type: application/json' \\\n    -d '{\"source\": \"docker { base = \\\"alpine:3.22\\\" }\"}'\n{\"files\":[{\"name\":\"Dockerfile\",\"content\":\"…\"}]}",

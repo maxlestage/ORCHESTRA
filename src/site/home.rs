@@ -28,10 +28,10 @@ fn hero() -> Element {
                 div()
                     .child(span().class("eyebrow").text("Rust‑Compose 1.0"))
                     .child(h1().html(
-                        "Un fichier <span class=\"grad\">.drc</span>.<br/>Trois cibles.",
+                        "Quatre lignes.<br/><span class=\"grad\">Trois cibles.</span>",
                     ))
                     .child(p().class("lead").text(
-                        "Décrivez votre application une seule fois. ORCHESTRA compile la partition en Dockerfile, docker-compose.yml et manifests Kubernetes, vérifiés avant d'être écrits.",
+                        "Une image, un port : c'est tout ce qu'il faut écrire. ORCHESTRA en déduit le docker-compose.yml, les manifests Kubernetes et, si besoin, le Dockerfile.",
                     ))
                     .child(
                         div()
@@ -61,19 +61,19 @@ fn how() -> Element {
             .child(span().class("eyebrow").text("Comment ça marche"))
             .child(h2().class("section-title").text("De la partition à la scène"))
             .child(p().class("lead").text(
-                "Un seul format lisible, influencé par TOML et YAML, que l'outil Rust transforme en fichiers standards.",
+                "Une application s'écrit en quatre lignes ; le Deployment, le Service et le service Compose en sont déduits.",
             ))
             .child(
                 ol().class("steps")
                     .child(step(
                         art::STEP_WRITE,
                         "Écrire",
-                        "Des variables, des fonctions et trois sections : <code>docker</code>, <code>compose</code> et <code>k8s</code>.",
+                        "<code>app web { image = \"nginx:1.29\", port = 80 }</code>. Le reste est déduit.",
                     ))
                     .child(step(
                         art::STEP_COMPILE,
                         "Compiler",
-                        "<code>orchestra build app.drc</code> valide la syntaxe et les types, remplace les variables, exécute les fonctions.",
+                        "<code>orchestra build app.drc</code> vérifie tout et propose la correction d'une faute de frappe.",
                     ))
                     .child(step(
                         art::STEP_DEPLOY,
@@ -112,8 +112,8 @@ fn principles() -> Element {
                     ))
                     .child(card(
                         art::ICON_FUNCTIONS,
-                        "Variables et fonctions",
-                        "<code>var</code>, <code>fn</code> et <code>format!</code> pour ne rien écrire deux fois.",
+                        "Sans répétition",
+                        "<code>var</code>, <code>fn tag(v) = IMAGE + \":\" + v</code> : chaque valeur s'écrit une seule fois.",
                     ))
                     .child(card(
                         art::ICON_TYPED,
@@ -139,7 +139,7 @@ fn demo() -> Element {
             .child(span().class("eyebrow").text("En direct"))
             .child(h2().class("section-title").text("Ce que produit le compilateur"))
             .child(p().class("lead").text(
-                "À gauche, le fichier .drc. À droite, les fichiers générés à l'instant par le compilateur du site.",
+                "Quatre lignes à gauche ; à droite, les fichiers générés à l'instant par le compilateur du site.",
             ))
             .child(
                 div()

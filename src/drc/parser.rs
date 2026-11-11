@@ -4,13 +4,15 @@
 //! fichier   = { item }
 //! item      = "import" chaîne
 //!           | "var" nom "=" expr
-//!           | "fn" nom "(" [ nom { "," nom } ] ")" "{" { instr } "}"
+//!           | "fn" nom "(" [ nom { "," nom } ] ")" ( "=" expr | "{" { instr } "}" )
+//!           | "app" ( nom | chaîne ) objet
 //!           | section [ "=" ] objet           (section = docker | compose | k8s)
 //! instr     = "var" nom "=" expr | "return" expr
-//! expr      = chaîne | nombre | true | false | liste | objet
+//! expr      = terme { "+" terme }
+//! terme     = chaîne | nombre | true | false | liste | objet
 //!           | nom | nom "(" args ")" | nom "!" "(" args ")"
 //! objet     = "{" { clé "=" expr [ "," ] } "}"
-//! liste     = "[" [ expr { "," expr } [ "," ] ] "]"
+//! liste     = "[" { expr [ "," ] } "]"          (virgules facultatives)
 //! ```
 
 use super::lexer::{Tok, Token};
@@ -32,6 +34,9 @@ pub enum ExprKind {
     List(Vec<Expr>),
     Object(Vec<Entry>),
     Var(String),
+    /// `a + b` : assemble des chaînes, additionne des nombres, met bout à bout des
+    /// listes, fusionne des objets.
+    Add(Box<Expr>, Box<Expr>),
     /// `nom(args)`, ou `nom!(args)` pour une macro (`format!`).
     Call {
         name: String,
@@ -78,6 +83,12 @@ pub enum Item {
         pos: Pos,
     },
     Fn(FnDef),
+    /// `app web { … }` : une application, déclinée en Compose, Kubernetes et Dockerfile.
+    App {
+        name: String,
+        body: Expr,
+        pos: Pos,
+    },
     Section {
         section: Section,
         body: Expr,
@@ -120,6 +131,9 @@ pub fn parse(tokens: &[Token]) -> Result<Vec<Item>, Error> {
 const RESERVED: &[&str] = &[
     "var", "fn", "return", "import", "true", "false", "docker", "compose", "k8s",
 ];
+
+/// Les mots qui commencent une déclaration.
+pub const DECLARATIONS: &[&str] = &["app", "var", "fn", "import", "docker", "compose", "k8s"];
 
 /// Imbrication maximale des listes, objets et appels.
 const MAX_NESTING: usize = 64;
@@ -191,7 +205,7 @@ impl Parser<'_> {
                 return Err(Error::at(
                     pos,
                     format!(
-                        "déclaration attendue (`var`, `fn`, `import`, `docker`, `compose` ou `k8s`), trouvé {}",
+                        "déclaration attendue (`app`, `var`, `fn`, `import`, `docker`, `compose` ou `k8s`), trouvé {}",
                         other.describe()
                     ),
                 ));
@@ -222,6 +236,33 @@ impl Parser<'_> {
             return Ok(Item::Section { section, body, pos });
         }
         match keyword.as_str() {
+            "app" => {
+                self.at += 1;
+                let token = self.next().clone();
+                let name = match token.kind {
+                    Tok::Ident(name) | Tok::Str(name) => name,
+                    other => {
+                        return Err(Error::at(
+                            token.pos,
+                            format!(
+                                "nom de l'application attendu après `app` (ex. `app web {{ … }}`), trouvé {}",
+                                other.describe()
+                            ),
+                        ));
+                    }
+                };
+                if self.peek() != &Tok::LBrace {
+                    return Err(Error::at(
+                        self.pos(),
+                        format!(
+                            "`{{` attendu après `app {name}`, trouvé {}",
+                            self.peek().describe()
+                        ),
+                    ));
+                }
+                let body = self.expr()?;
+                Ok(Item::App { name, body, pos })
+            }
             "import" => {
                 self.at += 1;
                 let token = self.next().clone();
@@ -261,7 +302,18 @@ impl Parser<'_> {
                     }
                 }
                 self.expect(Tok::RParen, "pour fermer les paramètres")?;
-                self.expect(Tok::LBrace, "pour ouvrir le corps de la fonction")?;
+                // `fn tag(v) = IMAGE + ":" + v` : une fonction d'une seule expression.
+                if self.peek() == &Tok::Eq {
+                    self.at += 1;
+                    let value = self.expr()?;
+                    return Ok(Item::Fn(FnDef {
+                        name,
+                        params,
+                        body: vec![Stmt::Return(value)],
+                        pos,
+                    }));
+                }
+                self.expect(Tok::LBrace, "pour ouvrir le corps de la fonction (ou `=`)")?;
                 let mut body = Vec::new();
                 while self.peek() != &Tok::RBrace {
                     body.push(self.stmt()?);
@@ -280,7 +332,8 @@ impl Parser<'_> {
             other => Err(Error::at(
                 pos,
                 format!(
-                    "déclaration inconnue `{other}` : attendu `var`, `fn`, `import`, `docker`, `compose` ou `k8s`"
+                    "déclaration inconnue `{other}`{} : attendu `app`, `var`, `fn`, `import`, `docker`, `compose` ou `k8s`",
+                    super::suggest(other, DECLARATIONS.iter().copied())
                 ),
             )),
         }
@@ -321,12 +374,27 @@ impl Parser<'_> {
             ));
         }
         self.depth += 1;
-        let expr = self.expr_inner();
+        let expr = self.sum();
         self.depth -= 1;
         expr
     }
 
-    fn expr_inner(&mut self) -> Result<Expr, Error> {
+    /// `terme + terme + …`
+    fn sum(&mut self) -> Result<Expr, Error> {
+        let mut left = self.term()?;
+        while self.peek() == &Tok::Plus {
+            let pos = self.pos();
+            self.at += 1;
+            let right = self.term()?;
+            left = Expr {
+                kind: ExprKind::Add(Box::new(left), Box::new(right)),
+                pos,
+            };
+        }
+        Ok(left)
+    }
+
+    fn term(&mut self) -> Result<Expr, Error> {
         let token = self.next().clone();
         let pos = token.pos;
         let kind = match token.kind {
@@ -340,18 +408,9 @@ impl Parser<'_> {
                         return Err(Error::at(pos, "liste jamais fermée (il manque `]`)"));
                     }
                     items.push(self.expr()?);
-                    match self.peek() {
-                        Tok::Comma => self.at += 1,
-                        Tok::RBracket => {}
-                        _ => {
-                            return Err(Error::at(
-                                self.pos(),
-                                format!(
-                                    "`,` ou `]` attendu dans la liste, trouvé {}",
-                                    self.peek().describe()
-                                ),
-                            ));
-                        }
+                    // Les virgules sont facultatives : `["a" "b"]` vaut `["a", "b"]`.
+                    if self.peek() == &Tok::Comma {
+                        self.at += 1;
                     }
                 }
                 self.at += 1;
@@ -471,6 +530,30 @@ mod tests {
         let Item::Fn(def) = &parsed[0] else { panic!() };
         assert_eq!(def.params, ["v"]);
         assert_eq!(def.body.len(), 2);
+    }
+
+    #[test]
+    fn simple_forms() {
+        let parsed = items("fn tag(v) = NAME + \":\" + v\napp web { port = 80 }\nvar L = [1 2, 3]");
+        let Item::Fn(def) = &parsed[0] else { panic!() };
+        assert!(matches!(
+            def.body[..],
+            [Stmt::Return(Expr {
+                kind: ExprKind::Add(..),
+                ..
+            })]
+        ));
+        assert!(matches!(&parsed[1], Item::App { name, .. } if name == "web"));
+        let Item::Var { value, .. } = &parsed[2] else {
+            panic!()
+        };
+        assert!(matches!(&value.kind, ExprKind::List(items) if items.len() == 3));
+        let err = parse(&tokenize("dokcer { }").unwrap()).unwrap_err();
+        assert!(
+            err.message.contains("vouliez-vous dire `docker`"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]

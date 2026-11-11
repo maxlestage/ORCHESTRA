@@ -5,21 +5,28 @@ manifests Kubernetes, et le site qui le présente, écrit en Rust avec
 [Paquets](https://github.com/maxlestage/Paquets).
 
 ```text
-var IMAGE_NAME = "myapp"
-
-fn image_tag(tag) {
-    return format!("{}:{}", IMAGE_NAME, tag)
+app web {
+    image = "nginx:1.29"
+    port = 80
 }
-
-docker  { base = "rust:1.99-slim", workdir = "/app", build = ["cargo build --release"], run = ["./myapp"] }
-compose { services = { web = { image = image_tag("latest"), ports = ["8080:80"] } } }
-k8s     { service = { name = "myapp", selector = { app = "myapp" }, ports = [{ port = 80 }] } }
 ```
+
+Quatre lignes : le service Compose, le Deployment et le Service Kubernetes en sont déduits.
+Ajoutez `build = "rust"` pour un Dockerfile, `host = "exemple.fr"` pour un Ingress,
+`replicas`, `env`, `volumes`, `depends_on`… Une faute de frappe ? Le compilateur la situe et
+propose la correction :
+
+```text
+app.drc:2:5 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)
+```
+
+Les sections `docker`, `compose` et `k8s` de la spécification complète restent disponibles
+pour tout le reste (voir `examples/complet.drc`).
 
 ```sh
 $ orchestra build app.drc --out deploy
-✓ deploy/Dockerfile
 ✓ deploy/docker-compose.yml
+✓ deploy/deployment.yaml
 ✓ deploy/service.yaml
 ```
 
@@ -75,12 +82,12 @@ cargo wasm && cargo run -- export dist
 
 | Chemin | Rôle |
 |---|---|
-| `src/drc/` | Le compilateur : lexeur, analyseur, évaluation (variables, fonctions, imports), vérifications, génération Docker / Compose / Kubernetes, YAML |
+| `src/drc/` | Le compilateur : lexeur, analyseur, évaluation (variables, fonctions, `+`, imports), applications (`app`), vérifications et suggestions, génération Docker / Compose / Kubernetes, YAML |
 | `src/render/` | Le HTML des résultats (coloration, fichiers, erreurs), partagé par le serveur et le WebAssembly |
 | `src/wasm.rs` | `orchestra.wasm` : le compilateur dans le navigateur |
 | `src/site/` | Le site Paquets : pages, illustrations SVG, feuille de style, export statique |
 | `src/main.rs` | Le binaire `orchestra` : le site, `orchestra build` et `orchestra check` |
-| `examples/` | `complet.drc` (les trois sections) et `projet/` (fichiers séparés et `import`) |
+| `examples/` | `simple.drc` (quatre lignes), `boutique.drc` (trois applications), `complet.drc` (les trois sections) et `projet/` (`import`) |
 | `ci/mobile.mjs` | Le contrôle « aucun défilement horizontal » |
 
 ## Intégration continue

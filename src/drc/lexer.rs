@@ -27,6 +27,8 @@ pub enum Tok {
     Semi,
     /// `!`
     Bang,
+    /// `+`
+    Plus,
     LBrace,
     RBrace,
     LBracket,
@@ -48,6 +50,7 @@ impl Tok {
             Tok::Comma => "`,`".into(),
             Tok::Semi => "`;`".into(),
             Tok::Bang => "`!`".into(),
+            Tok::Plus => "`+`".into(),
             Tok::LBrace => "`{`".into(),
             Tok::RBrace => "`}`".into(),
             Tok::LBracket => "`[`".into(),
@@ -83,6 +86,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, Error> {
             ',' => lexer.single(Tok::Comma),
             ';' => lexer.single(Tok::Semi),
             '!' => lexer.single(Tok::Bang),
+            '+' => lexer.single(Tok::Plus),
             '{' => lexer.single(Tok::LBrace),
             '}' => lexer.single(Tok::RBrace),
             '[' => lexer.single(Tok::LBracket),
