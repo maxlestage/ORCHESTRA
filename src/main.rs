@@ -1,0 +1,120 @@
+//! ORCHESTRA : le site de Rust‑Compose (Paquets) et l'outil `orchestra build`.
+//!
+//!     cargo run                                   # le site, http://localhost:3000
+//!     cargo run -- build app.drc --out generated  # écrit Dockerfile, compose, manifests
+//!     cargo run -- check app.drc                  # vérifie sans rien écrire
+
+mod site;
+
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use orchestra::drc::{self, GeneratedFile};
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        None | Some("serve") => match site::app().run() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("orchestra : {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("build") => cli(&args[1..], true),
+        Some("check") => cli(&args[1..], false),
+        Some("-h" | "--help" | "help") => {
+            println!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        Some("-V" | "--version") => {
+            println!("orchestra {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Some(other) => {
+            eprintln!("orchestra : commande inconnue `{other}`\n\n{USAGE}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+const USAGE: &str = "\
+ORCHESTRA : Rust-Compose, un fichier .drc pour Docker, Compose et Kubernetes.
+
+Usage :
+  orchestra                         lance le site (PORT, 3000 par défaut)
+  orchestra build <fichier.drc> [--out <dossier>]
+                                    écrit Dockerfile, docker-compose.yml et les manifests
+  orchestra check <fichier.drc>     vérifie le fichier sans rien écrire";
+
+fn cli(args: &[String], write: bool) -> ExitCode {
+    let mut input = None;
+    let mut out = PathBuf::from(".");
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--out" | "-o" if write => match args.next() {
+                Some(dir) => out = PathBuf::from(dir),
+                None => return usage_error("`--out` attend un dossier"),
+            },
+            flag if flag.starts_with('-') => {
+                return usage_error(&format!("option inconnue `{flag}`"));
+            }
+            file if input.is_none() => input = Some(PathBuf::from(file)),
+            extra => return usage_error(&format!("argument en trop `{extra}`")),
+        }
+    }
+    let Some(input) = input else {
+        return usage_error("indiquez un fichier .drc");
+    };
+    let files = match compile_file(&input) {
+        Ok(files) => files,
+        Err(message) => {
+            eprintln!("erreur : {message}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !write {
+        println!(
+            "✓ {} : {} fichier(s) à générer",
+            input.display(),
+            files.len()
+        );
+        return ExitCode::SUCCESS;
+    }
+    if let Err(e) = std::fs::create_dir_all(&out) {
+        eprintln!("erreur : {} : {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    for file in &files {
+        let path = out.join(&file.name);
+        if let Err(e) = std::fs::write(&path, &file.content) {
+            eprintln!("erreur : {} : {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+        println!("✓ {}", path.display());
+    }
+    ExitCode::SUCCESS
+}
+
+fn usage_error(message: &str) -> ExitCode {
+    eprintln!("orchestra : {message}\n\n{USAGE}");
+    ExitCode::from(2)
+}
+
+/// Compile un fichier ; ses `import` sont lus par rapport à son dossier.
+fn compile_file(path: &Path) -> Result<Vec<GeneratedFile>, String> {
+    let source = std::fs::read_to_string(path).map_err(|e| format!("{} : {e}", path.display()))?;
+    let name = path.display().to_string();
+    drc::compile(&name, &source, &mut |from, import| {
+        let base = Path::new(from).parent().unwrap_or(Path::new("."));
+        let target = base.join(import);
+        let canonical = target
+            .canonicalize()
+            .map_err(|e| format!("import \"{import}\" : {e}"))?;
+        let source = std::fs::read_to_string(&canonical)
+            .map_err(|e| format!("import \"{import}\" : {e}"))?;
+        Ok((canonical.display().to_string(), source))
+    })
+    .map_err(|e| e.to_string())
+}

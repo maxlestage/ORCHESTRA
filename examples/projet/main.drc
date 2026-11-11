@@ -1,0 +1,4 @@
+# Rust-Compose 1.0
+# Point d'entrée : `orchestra build examples/projet/main.drc --out generated`
+import "docker/app.drc"
+import "k8s/deployment.drc"

@@ -1,0 +1,9 @@
+# Rust-Compose 1.0
+# Variables globales et fonctions, partagées par les autres fichiers.
+
+var IMAGE_NAME = "myapp"
+var VERSION = "1.0.0"
+
+fn image_tag(tag) {
+    return format!("{}:{}", IMAGE_NAME, tag)
+}

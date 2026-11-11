@@ -1,0 +1,92 @@
+# Teste chaque push. Quand tout est vert, la branche est fusionnée automatiquement
+# dans master (sauf master elle-même et les branches nommées wip/...).
+#
+# - rust : format, clippy, tests (le compilateur Rust-Compose et le site) ;
+# - mobile : le site tourne, et aucune page ne défile horizontalement de 320 à 1440 px ;
+# - merge : la fusion dans master.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Les dépendances git (Paquets et ses paquets) se lisent avec le secret REPOS_TOKEN
+  # s'il existe (dépôts privés) ; sans lui, rien ne change.
+  REPOS_TOKEN: ${{ secrets.REPOS_TOKEN }}
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  GIT_CONFIG_COUNT: ${{ secrets.REPOS_TOKEN != '' && 1 || 0 }}
+  GIT_CONFIG_KEY_0: credential.https://github.com.helper
+  GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && echo username=x-access-token && echo "password=$REPOS_TOKEN"; }; f'
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+      - name: Exemples (orchestra check et build)
+        run: |
+          cargo run --quiet --locked -- check examples/complet.drc
+          cargo run --quiet --locked -- build examples/projet/main.drc --out deploy
+          ls deploy
+
+  mobile:
+    name: Mobile d'abord (aucun défilement horizontal)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - run: cargo build --locked
+      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - name: Pages de 320 à 1440 px
+        run: |
+          PORT=3000 ./target/debug/orchestra &
+          for i in $(seq 1 30); do curl -sf localhost:3000/health && break; sleep 1; done
+          node ci/mobile.mjs http://localhost:3000
+
+  merge:
+    name: Fusion dans master
+    needs: [rust, mobile]
+    if: >-
+      github.event_name == 'push' && github.ref_name != 'master' &&
+      !startsWith(github.ref_name, 'wip/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: merge-into-master
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Fusion de ${{ github.ref_name }}
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge-base --is-ancestor "$SHA" HEAD; then
+            echo "$BRANCH est déjà dans master."
+            exit 0
+          fi
+          git merge --no-ff --no-edit "$SHA" -m "Merge branch '$BRANCH' into master (auto-merge)"
+          git push origin HEAD:master
