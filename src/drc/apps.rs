@@ -1,12 +1,6 @@
-//! `app web { … }` : une application décrite en quelques lignes, déclinée en service
+//! `web { image = "nginx:1.29" }` : une application en une ligne, déclinée en service
 //! Compose, Deployment, Service et Ingress Kubernetes, et Dockerfile pour `build = "rust"`.
-//!
-//! ```text
-//! app web {
-//!     image = "nginx:1.29"
-//!     port = 80
-//! }
-//! ```
+//! Le port des images courantes (nginx, postgres, redis…) est déduit.
 //!
 //! Les sections `docker`, `compose` et `k8s` écrites à la main restent possibles : elles
 //! complètent ce que les applications génèrent, ou le remplacent clé par clé.
@@ -163,18 +157,18 @@ impl<'a> App<'a> {
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
         if !valid {
             return Err(err(format!(
-                "`app {name}` : le nom s'écrit en minuscules, chiffres et `-` (ex. `app mon-api`)"
+                "`{name}` : le nom s'écrit en minuscules, chiffres et `-` (ex. `mon-api {{ … }}`)"
             )));
         }
         let Value::Object(fields) = &app.value else {
-            return Err(err(format!("`app {name}` attend `{{ … }}`")));
+            return Err(err(format!("`{name}` attend `{{ … }}`")));
         };
         for (key, _) in fields {
             if !KEYS.contains(&key.as_str()) {
                 return Err(at(
                     key,
                     format!(
-                        "`app {name}` : clé inconnue `{key}`{} (possibles : {})",
+                        "`{name}` : clé inconnue `{key}`{} (possibles : {})",
                         super::suggest(key, KEYS.iter().copied()),
                         KEYS.join(", ")
                     ),
@@ -189,7 +183,7 @@ impl<'a> App<'a> {
                 Some(other) => Err(at(
                     key,
                     format!(
-                        "`app {name}` : `{key}` doit être un texte non vide, pas {}",
+                        "`{name}` : `{key}` doit être un texte non vide, pas {}",
                         other.type_name()
                     ),
                 )),
@@ -205,7 +199,7 @@ impl<'a> App<'a> {
                         other => Err(at(
                             key,
                             format!(
-                                "`app {name}` : `{key}` ne contient que des textes, pas {}",
+                                "`{name}` : `{key}` ne contient que des textes, pas {}",
                                 other.type_name()
                             ),
                         )),
@@ -215,7 +209,7 @@ impl<'a> App<'a> {
                 Some(other) => Err(at(
                     key,
                     format!(
-                        "`app {name}` : `{key}` est un texte ou une liste de textes, pas {}",
+                        "`{name}` : `{key}` est un texte ou une liste de textes, pas {}",
                         other.type_name()
                     ),
                 )),
@@ -228,18 +222,19 @@ impl<'a> App<'a> {
             (None, Some(_)) => format!("{name}:latest"),
             (None, None) => {
                 return Err(err(format!(
-                    "`app {name}` a besoin d'une image (`image = \"nginx:1.29\"`) ou de `build = \"rust\"`"
+                    "`{name}` a besoin d'une image (`image = \"nginx:1.29\"`) ou de `build = \"rust\"`"
                 )));
             }
         };
         let port = match get("port") {
-            None => None,
+            None => known_port(&image),
+            Some(Value::Bool(false)) => None,
             Some(Value::Int(p)) if (1..=65535).contains(p) => Some(*p),
             Some(_) => {
                 return Err(at(
                     "port",
                     format!(
-                        "`app {name}` : `port` est un nombre entre 1 et 65535 (ex. `port = 8080`)"
+                        "`{name}` : `port` est un nombre entre 1 et 65535 (ex. `port = 8080`), ou `false` pour aucun"
                     ),
                 ));
             }
@@ -250,7 +245,7 @@ impl<'a> App<'a> {
             Some(_) => {
                 return Err(at(
                     "replicas",
-                    format!("`app {name}` : `replicas` est un nombre entier positif"),
+                    format!("`{name}` : `replicas` est un nombre entier positif"),
                 ));
             }
         };
@@ -264,14 +259,14 @@ impl<'a> App<'a> {
                     Value::Float(n) => Ok((k.clone(), n.to_string())),
                     Value::Bool(b) => Ok((k.clone(), b.to_string())),
                     other => Err(at("env", format!(
-                        "`app {name}` : `env.{k}` doit être un texte, un nombre ou un booléen, pas {}",
+                        "`{name}` : `env.{k}` doit être un texte, un nombre ou un booléen, pas {}",
                         other.type_name()
                     ))),
                 })
                 .collect::<Result<_, _>>()?,
             Some(other) => {
                 return Err(at("env", format!(
-                    "`app {name}` : `env` s'écrit `{{ CLE = \"valeur\" }}`, pas {}",
+                    "`{name}` : `env` s'écrit `{{ CLE = \"valeur\" }}`, pas {}",
                     other.type_name()
                 )));
             }
@@ -286,7 +281,7 @@ impl<'a> App<'a> {
                 return Err(at(
                     "depends_on",
                     format!(
-                        "`app {name}` dépend de `{other}`, qui n'existe pas{}",
+                        "`{name}` dépend de `{other}`, qui n'existe pas{}",
                         super::suggest(other, all.iter().map(|a| a.name.as_str()))
                     ),
                 ));
@@ -296,7 +291,7 @@ impl<'a> App<'a> {
         if host.is_some() && port.is_none() {
             return Err(at(
                 "host",
-                format!("`app {name}` : `host` publie l'application, il lui faut un `port`"),
+                format!("`{name}` : `host` publie l'application, il lui faut un `port`"),
             ));
         }
         Ok(Self {
@@ -470,6 +465,36 @@ impl<'a> App<'a> {
             ),
         ]))
     }
+}
+
+/// Le port des images courantes, pour ne pas avoir à l'écrire.
+pub const KNOWN_PORTS: &[(&str, i64)] = &[
+    ("nginx", 80),
+    ("httpd", 80),
+    ("caddy", 80),
+    ("traefik", 80),
+    ("postgres", 5432),
+    ("mysql", 3306),
+    ("mariadb", 3306),
+    ("redis", 6379),
+    ("valkey", 6379),
+    ("mongo", 27017),
+    ("rabbitmq", 5672),
+    ("memcached", 11211),
+    ("elasticsearch", 9200),
+    ("grafana", 3000),
+    ("prometheus", 9090),
+    ("minio", 9000),
+];
+
+/// `docker.io/library/postgres:18-alpine` → 5432.
+fn known_port(image: &str) -> Option<i64> {
+    let name = image.rsplit('/').next().unwrap_or(image);
+    let name = name.split([':', '@']).next().unwrap_or(name);
+    KNOWN_PORTS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, p)| *p)
 }
 
 fn list(items: &[String]) -> Value {

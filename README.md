@@ -5,19 +5,17 @@ manifests Kubernetes, et le site qui le présente, écrit en Rust avec
 [Paquets](https://github.com/maxlestage/Paquets).
 
 ```text
-app web {
-    image = "nginx:1.29"
-    port = 80
-}
+web { image = "nginx:1.29" }
 ```
 
-Quatre lignes : le service Compose, le Deployment et le Service Kubernetes en sont déduits.
-Ajoutez `build = "rust"` pour un Dockerfile, `host = "exemple.fr"` pour un Ingress,
+Une ligne : le port (80 pour nginx), le service Compose, le Deployment et le Service
+Kubernetes en sont déduits. Ajoutez `build = "rust"` pour un Dockerfile, `host = "exemple.fr"`
+pour un Ingress,
 `replicas`, `env`, `volumes`, `depends_on`… Une faute de frappe ? Le compilateur la situe et
 propose la correction :
 
 ```text
-app.drc:2:5 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)
+app.drc:2:5 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)
 ```
 
 Les sections `docker`, `compose` et `k8s` de la spécification complète restent disponibles
@@ -87,7 +85,7 @@ cargo wasm && cargo run -- export dist
 | `src/wasm.rs` | `orchestra.wasm` : le compilateur dans le navigateur |
 | `src/site/` | Le site Paquets : pages, illustrations SVG, feuille de style, export statique |
 | `src/main.rs` | Le binaire `orchestra` : le site, `orchestra build` et `orchestra check` |
-| `examples/` | `simple.drc` (quatre lignes), `boutique.drc` (trois applications), `complet.drc` (les trois sections) et `projet/` (`import`) |
+| `examples/` | `simple.drc` (une ligne), `boutique.drc` (trois applications), `complet.drc` (les trois sections) et `projet/` (`import`) |
 | `ci/mobile.mjs` | Le contrôle « aucun défilement horizontal » |
 
 ## Intégration continue

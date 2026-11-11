@@ -7,7 +7,7 @@ pub struct Example {
     pub source: &'static str,
 }
 
-/// L'exemple de la page d'accueil : quatre lignes, trois fichiers.
+/// L'exemple de la page d'accueil : une ligne, trois fichiers.
 pub const HOME: &str = include_str!("../../examples/simple.drc");
 
 pub const ALL: &[Example] = &[
@@ -135,9 +135,8 @@ k8s {
         id: "erreur",
         title: "Avec une erreur",
         source: r#"# Une faute de frappe : le compilateur la trouve, et propose la correction.
-app web {
+web {
     imgae = "nginx:1.29"
-    port = 80
 }
 "#,
     },

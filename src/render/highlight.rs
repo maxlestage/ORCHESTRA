@@ -39,7 +39,6 @@ pub fn for_file(name: &str, source: &str) -> String {
 }
 
 const KEYWORDS: &[&str] = &["app", "var", "fn", "return", "import"];
-const SECTIONS: &[&str] = &["docker", "compose", "k8s"];
 
 /// Un fichier Rust-Compose.
 pub fn drc(source: &str) -> String {
@@ -96,7 +95,7 @@ pub fn drc(source: &str) -> String {
                 "keyword"
             } else if word == "true" || word == "false" {
                 "number"
-            } else if SECTIONS.contains(&word.as_str()) && next == Some('{') {
+            } else if next == Some('{') {
                 "section"
             } else if next == Some('(') || (next == Some('!') && chars.get(j + 1) == Some(&'(')) {
                 "call"
