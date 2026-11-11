@@ -111,7 +111,7 @@ fn mistakes_are_reported_with_their_position() {
         error("k8s { service = { name = \"s\", ports = [{ port = 0 }] } }")
             .contains("entre 1 et 65535")
     );
-    assert!(error("var X = 1").contains("aucune section"));
+    assert!(error("var X = 1").contains("rien à générer"));
     assert!(error("import \"autre.drc\"\ndocker { base = \"a\" }").contains("imports"));
 }
 
@@ -158,4 +158,108 @@ fn runaway_programs_are_stopped() {
     let cycle = |_: &str, path: &str| Ok((path.to_owned(), format!("import \"{path}\"")));
     let err = drc::compile("a.drc", "import \"a.drc\"", &mut { cycle }).unwrap_err();
     assert!(err.message.contains("import circulaire"));
+}
+
+#[test]
+fn an_app_in_four_lines() {
+    let files = drc::compile_str(include_str!("../examples/simple.drc")).unwrap();
+    let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["docker-compose.yml", "deployment.yaml", "service.yaml"]
+    );
+    assert!(
+        file(&files, "docker-compose.yml")
+            .contains("  web:\n    image: nginx:1.29\n    ports:\n      - \"80:80\"\n")
+    );
+    let deployment = file(&files, "deployment.yaml");
+    assert!(deployment.contains("  replicas: 1\n  selector:\n    matchLabels:\n      app: web\n"));
+    assert!(deployment.contains("        - name: web\n          image: nginx:1.29\n          ports:\n            - containerPort: 80\n"));
+    assert!(file(&files, "service.yaml").contains("    - port: 80\n      targetPort: 80\n"));
+}
+
+#[test]
+fn several_apps_with_a_rust_build_and_a_host() {
+    let files = drc::compile_str(include_str!("../examples/boutique.drc")).unwrap();
+    let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Dockerfile",
+            "docker-compose.yml",
+            "deployment.yaml",
+            "service.yaml",
+            "ingress.yaml"
+        ]
+    );
+    let dockerfile = file(&files, "Dockerfile");
+    assert!(dockerfile.contains("FROM rust:1.99-slim AS build\n"));
+    assert!(
+        dockerfile.contains("COPY --from=build /app/target/release/site target/release/site\n")
+    );
+    assert!(dockerfile.contains("EXPOSE 8080\nCMD [\"./target/release/site\"]\n"));
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("  site:\n    build: .\n    image: site:latest\n"));
+    assert!(compose.contains("  api:\n    image: ghcr.io/acme/api:2.1.0\n"));
+    assert!(compose.contains("      POSTGRES_PASSWORD: secret\n"));
+    assert!(compose.contains("    depends_on:\n      - db\n"));
+    let deployment = file(&files, "deployment.yaml");
+    assert_eq!(deployment.matches("kind: Deployment").count(), 3);
+    assert!(deployment.contains("  replicas: 3\n"));
+    // La base n'a pas de port : pas de Service pour elle.
+    assert_eq!(
+        file(&files, "service.yaml")
+            .matches("kind: Service")
+            .count(),
+        2
+    );
+    assert!(file(&files, "ingress.yaml").contains("    - host: boutique.example.com\n"));
+}
+
+#[test]
+fn apps_and_hand_written_sections_together() {
+    let files = drc::compile_str(
+        r#"
+        app web { image = "nginx:1.29", port = 80 }
+        compose { services = { web = { restart = "always" } } }
+        k8s { configmap = { name = "web", data = { "a.conf" = "x" } } }
+        "#,
+    )
+    .unwrap();
+    assert!(
+        file(&files, "docker-compose.yml").contains("      - \"80:80\"\n    restart: always\n")
+    );
+    assert!(file(&files, "configmap.yaml").contains("kind: ConfigMap"));
+    assert!(file(&files, "deployment.yaml").contains("name: web"));
+}
+
+#[test]
+fn writing_is_forgiving_and_errors_help() {
+    // `+`, fonction d'une ligne, virgules facultatives.
+    let files = drc::compile_str(
+        "var TAG = 1 + 1\nfn img(n) = n + \":\" + TAG\napp web { image = img(\"nginx\"), command = [\"nginx\" \"-g\" \"daemon off;\"] }",
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("image: nginx:2\n"));
+    assert!(compose.contains("      - nginx\n      - \"-g\"\n      - daemon off;\n"));
+
+    assert!(error("app web {\n  imgae = \"nginx\"\n}").starts_with(
+        "main.drc:2:3 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)"
+    ));
+    assert!(error("app web { port = 80 }").contains("a besoin d'une image"));
+    assert!(error("app Web { image = \"x\" }").contains("minuscules"));
+    assert!(
+        error("app a { image = \"x\", depends_on = [\"bd\"] }\napp db { image = \"y\" }")
+            .contains("vouliez-vous dire `db`")
+    );
+    assert!(
+        error("var IMAGE = \"x\"\napp a { image = IMAEG }").contains("vouliez-vous dire `IMAGE`")
+    );
+    assert!(error("docker { bsae = \"a\" }").contains("vouliez-vous dire `base`"));
+    assert!(error("app a { image = \"x\", host = \"a.fr\" }").contains("il lui faut un `port`"));
+    assert!(
+        error("app a { build = \"rust\" }\napp b { build = \"rust\" }")
+            .contains("un seul Dockerfile")
+    );
 }

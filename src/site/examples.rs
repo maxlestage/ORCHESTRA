@@ -7,41 +7,20 @@ pub struct Example {
     pub source: &'static str,
 }
 
-/// L'exemple de la page d'accueil : court, et les trois cibles.
-pub const HOME: &str = r#"# Rust-Compose 1.0
-var IMAGE_NAME = "myapp"
-
-fn image_tag(tag) {
-    return format!("{}:{}", IMAGE_NAME, tag)
-}
-
-docker {
-    base = "rust:1.99-slim"
-    workdir = "/app"
-    copy = [{ src = ".", dst = "." }]
-    build = ["cargo build --release"]
-    from = "debian:trixie-slim"
-    artifacts = ["target/release/myapp"]
-    run = ["./target/release/myapp"]
-    expose = [8080]
-}
-
-compose {
-    services = {
-        web = { image = image_tag("latest"), ports = ["8080:8080"] }
-    }
-}
-
-k8s {
-    service = {
-        name = "myapp"
-        selector = { app = "myapp" }
-        ports = [{ port = 80, targetPort = 8080 }]
-    }
-}
-"#;
+/// L'exemple de la page d'accueil : quatre lignes, trois fichiers.
+pub const HOME: &str = include_str!("../../examples/simple.drc");
 
 pub const ALL: &[Example] = &[
+    Example {
+        id: "simple",
+        title: "Le plus simple",
+        source: include_str!("../../examples/simple.drc"),
+    },
+    Example {
+        id: "boutique",
+        title: "Trois applications",
+        source: include_str!("../../examples/boutique.drc"),
+    },
     Example {
         id: "complet",
         title: "Complet",
@@ -155,19 +134,10 @@ k8s {
     Example {
         id: "erreur",
         title: "Avec une erreur",
-        source: r#"# Rust-Compose 1.0
-# Le compilateur vérifie les éléments obligatoires : ici, l'image du conteneur manque.
-k8s {
-    deployment = {
-        name = "web"
-        labels = { app = "web" }
-        template = {
-            metadata = { labels = { app = "web" } }
-            spec = {
-                containers = [{ name = "web" }]
-            }
-        }
-    }
+        source: r#"# Une faute de frappe : le compilateur la trouve, et propose la correction.
+app web {
+    imgae = "nginx:1.29"
+    port = 80
 }
 "#,
     },

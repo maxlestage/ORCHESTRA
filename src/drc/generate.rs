@@ -95,7 +95,8 @@ impl Check {
 
     fn unknown(&self, path: &str, key: &str, allowed: &[&str]) -> Error {
         self.err(format!(
-            "directive inconnue `{path}.{key}` (attendu : {})",
+            "directive inconnue `{path}.{key}`{} (attendu : {})",
+            super::suggest(key, allowed.iter().copied()),
             allowed.join(", ")
         ))
     }

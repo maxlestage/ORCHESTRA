@@ -41,10 +41,21 @@ pub struct SectionValue {
     pub pos: Pos,
 }
 
+/// Une application `app nom { … }` évaluée.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppValue {
+    pub name: String,
+    pub value: Value,
+    pub pos: Pos,
+    /// La position de chaque clé, pour situer les erreurs.
+    pub keys: Vec<(String, Pos)>,
+}
+
 pub struct Evaluator<'r> {
     globals: HashMap<String, Value>,
     fns: HashMap<String, Rc<FnDef>>,
     pub sections: Vec<SectionValue>,
+    pub apps: Vec<AppValue>,
     /// Les fichiers en cours d'import, pour repérer les cycles.
     stack: Vec<String>,
     loaded: HashSet<String>,
@@ -59,6 +70,7 @@ impl<'r> Evaluator<'r> {
             globals: HashMap::new(),
             fns: HashMap::new(),
             sections: Vec::new(),
+            apps: Vec::new(),
             stack: Vec::new(),
             loaded: HashSet::new(),
             spent: Cell::new(0),
@@ -136,6 +148,28 @@ impl<'r> Evaluator<'r> {
                 self.globals.insert(name, value);
                 Ok(())
             }
+            Item::App { name, body, pos } => {
+                if self.apps.iter().any(|a| a.name == name) {
+                    return Err(Error::at(
+                        pos,
+                        format!("l'application `{name}` est déjà définie"),
+                    ));
+                }
+                let keys = match &body.kind {
+                    ExprKind::Object(entries) => {
+                        entries.iter().map(|e| (e.key.clone(), e.pos)).collect()
+                    }
+                    _ => Vec::new(),
+                };
+                let value = self.eval(&body, &HashMap::new(), 0)?;
+                self.apps.push(AppValue {
+                    name,
+                    value,
+                    pos,
+                    keys,
+                });
+                Ok(())
+            }
             Item::Section { section, body, pos } => {
                 let value = self.eval(&body, &HashMap::new(), 0)?;
                 match self.sections.iter_mut().find(|s| s.section == section) {
@@ -193,7 +227,10 @@ impl<'r> Evaluator<'r> {
                     let hint = if self.fns.contains_key(name) {
                         format!(" (`{name}` est une fonction : appelez-la avec `{name}(…)`)")
                     } else {
-                        String::new()
+                        super::suggest(
+                            name,
+                            locals.keys().chain(self.globals.keys()).map(String::as_str),
+                        )
                     };
                     return Err(Error::at(
                         expr.pos,
@@ -201,6 +238,11 @@ impl<'r> Evaluator<'r> {
                     ));
                 }
             },
+            ExprKind::Add(left, right) => {
+                let left = self.eval(left, locals, depth)?;
+                let right = self.eval(right, locals, depth)?;
+                self.charge(add(left, right, expr.pos)?, expr.pos)?
+            }
             ExprKind::Call {
                 name,
                 args,
@@ -238,9 +280,15 @@ impl<'r> Evaluator<'r> {
         }
         let Some(def) = self.fns.get(name) else {
             let hint = if name == "format" {
-                " (écrivez `format!(…)`)"
+                " (écrivez `format!(…)`)".to_owned()
             } else {
-                ""
+                super::suggest(
+                    name,
+                    self.fns
+                        .keys()
+                        .map(String::as_str)
+                        .chain(BUILTINS.iter().copied()),
+                )
             };
             return Err(Error::at(pos, format!("fonction inconnue `{name}`{hint}")));
         };
@@ -275,6 +323,29 @@ impl<'r> Evaluator<'r> {
             format!("la fonction `{name}` se termine sans `return`"),
         ))
     }
+}
+
+/// `a + b` : des nombres s'additionnent, des listes se suivent, des objets se
+/// fusionnent ; sinon les deux valeurs s'écrivent l'une après l'autre (`"app:" + 2`).
+fn add(left: Value, right: Value, pos: Pos) -> Result<Value, Error> {
+    Ok(match (left, right) {
+        (Value::Int(a), Value::Int(b)) => Value::Int(
+            a.checked_add(b)
+                .ok_or_else(|| Error::at(pos, "nombre trop grand"))?,
+        ),
+        (Value::Int(a), Value::Float(b)) => Value::Float(a as f64 + b),
+        (Value::Float(a), Value::Int(b)) => Value::Float(a + b as f64),
+        (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
+        (Value::List(mut a), Value::List(b)) => {
+            a.extend(b);
+            Value::List(a)
+        }
+        (mut a @ Value::Object(_), b @ Value::Object(_)) => {
+            merge(&mut a, b);
+            a
+        }
+        (a, b) => Value::Str(scalar(&a, pos, "`+`")? + &scalar(&b, pos, "`+`")?),
+    })
 }
 
 /// Fusionne `other` dans `base` : objet par objet, la dernière valeur l'emporte.

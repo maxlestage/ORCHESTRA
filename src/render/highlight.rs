@@ -38,7 +38,7 @@ pub fn for_file(name: &str, source: &str) -> String {
     }
 }
 
-const KEYWORDS: &[&str] = &["var", "fn", "return", "import"];
+const KEYWORDS: &[&str] = &["app", "var", "fn", "return", "import"];
 const SECTIONS: &[&str] = &["docker", "compose", "k8s"];
 
 /// Un fichier Rust-Compose.
