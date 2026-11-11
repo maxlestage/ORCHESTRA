@@ -20,6 +20,7 @@ jobs:
   rust:
     name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -35,12 +36,14 @@ jobs:
       - name: Exemples (orchestra check et build)
         run: |
           cargo run --quiet --locked -- check examples/complet.drc
+          cargo run --quiet --locked -- check examples/versions.drc --set API=9.9.9
           cargo run --quiet --locked -- build examples/projet/main.drc --out deploy
           ls deploy
 
   mobile:
     name: Mobile d'abord (aucun défilement horizontal)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -49,15 +52,20 @@ jobs:
         with:
           node-version: lts/*
       - run: cargo build --locked
-      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      # Le Chrome déjà installé sur les machines GitHub : rien à télécharger.
+      - run: npm install --no-save playwright
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Pages de 320 à 1440 px
+        timeout-minutes: 5
         run: |
           PORT=3000 ./target/debug/orchestra &
           for i in $(seq 1 30); do curl -sf localhost:3000/health && break; sleep 1; done
-          node ci/mobile.mjs http://localhost:3000
+          PW_CHANNEL=chrome node ci/mobile.mjs http://localhost:3000
 
   merge:
     name: Fusion dans master
+    timeout-minutes: 5
     needs: [rust, mobile]
     if: >-
       github.event_name == 'push' && github.ref_name != 'master' &&

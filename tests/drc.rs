@@ -272,7 +272,7 @@ fn writing_is_forgiving_and_errors_help() {
             "main.drc:2:3 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)"
         )
     );
-    assert!(error("app web { port = 80 }").contains("a besoin d'une image"));
+    assert!(error("app web { port = 80 }").contains("il faut une image"));
     assert!(error("app Web { image = \"x\" }").contains("minuscules"));
     assert!(
         error("app a { image = \"x\", depends_on = [\"bd\"] }\napp db { image = \"y\" }")
@@ -344,4 +344,111 @@ fn port_mistakes_are_caught() {
         error("a { image = \"nginx:1.29\" }\nb { image = \"nginx:1.29\" }")
             .contains("déjà publié par `a`")
     );
+}
+
+#[test]
+fn versions_apart_from_images() {
+    let files = drc::compile_str(
+        r#"
+        db    { image = "postgres", version = "18-alpine" }
+        cache { image = "redis", version = 8 }
+        site  { build = "rust", version = "2.1.0", port = 8080 }
+        "#,
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("image: postgres:18-alpine\n"));
+    assert!(compose.contains("image: redis:8\n"));
+    assert!(compose.contains("    build: .\n    image: site:2.1.0\n"));
+    // Le port connu de l'image est déduit, version ou pas.
+    assert!(compose.contains("      - \"5432:5432\"\n"));
+    assert!(error("db { image = \"postgres:17\", version = \"18\" }").contains("pas les deux"));
+    assert!(error("db { version = \"18\" }").contains("`version` a besoin d'une `image`"));
+    // Un registre avec un port n'est pas une version.
+    assert!(drc::compile_str("a { image = \"localhost:5000/api\", version = \"1\" }").is_ok());
+}
+
+fn with_overrides(source: &str, overrides: &[(&str, &str)]) -> Result<Vec<GeneratedFile>, String> {
+    let overrides: Vec<(String, String)> = overrides
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+    drc::compile_with(
+        "main.drc",
+        source,
+        &mut |_, _| Err("pas d'import".into()),
+        &overrides,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[test]
+fn versions_chosen_when_compiling() {
+    let source = "API = \"2.1.0\"\nREPLICAS = 2\napi { image = \"acme/api:\" + API, port = 3000, replicas = REPLICAS }";
+    let files = with_overrides(source, &[("API", "2.2.0"), ("REPLICAS", "5")]).unwrap();
+    assert!(file(&files, "docker-compose.yml").contains("image: acme/api:2.2.0\n"));
+    assert!(file(&files, "deployment.yaml").contains("  replicas: 5\n"));
+    // « 1.10 » reste un texte : la variable est un texte dans le fichier.
+    let files = with_overrides(source, &[("API", "1.10")]).unwrap();
+    assert!(file(&files, "docker-compose.yml").contains("image: acme/api:1.10\n"));
+
+    assert_eq!(
+        with_overrides(source, &[("APi", "3")]).unwrap_err(),
+        "`--set APi=…` : aucune variable `APi` dans le projet (vouliez-vous dire `API` ?)"
+    );
+    assert!(
+        with_overrides(source, &[("REPLICAS", "beaucoup")])
+            .unwrap_err()
+            .contains("`REPLICAS` est un nombre entier dans le fichier")
+    );
+}
+
+#[test]
+fn several_containers_in_one_app() {
+    let files = drc::compile_str(
+        r#"
+        api {
+            image = "acme/api:2"
+            port = 3000
+            with = {
+                proxy = { image = "envoyproxy/envoy", version = "v1.36", port = "9901" }
+                logs  = { image = "fluent/fluent-bit:4.1", env = { LEVEL = "info" } }
+            }
+        }
+        "#,
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    // L'application publie aussi les ports de ses conteneurs, qui partagent son réseau.
+    assert!(compose.contains(
+        "  api:\n    image: acme/api:2\n    ports:\n      - \"3000:3000\"\n      - \"9901:9901\"\n"
+    ));
+    assert!(compose.contains("  api-proxy:\n    image: envoyproxy/envoy:v1.36\n    network_mode: service:api\n    depends_on:\n      - api\n"));
+    assert!(compose.contains("  api-logs:\n    image: fluent/fluent-bit:4.1\n    environment:\n      LEVEL: info\n    network_mode: service:api\n"));
+
+    let deployment = file(&files, "deployment.yaml");
+    assert_eq!(deployment.matches("kind: Deployment").count(), 1);
+    assert!(deployment.contains("        - name: api\n          image: acme/api:2\n"));
+    assert!(deployment.contains("        - name: proxy\n          image: envoyproxy/envoy:v1.36\n          ports:\n            - containerPort: 9901\n"));
+    assert!(deployment.contains("        - name: logs\n"));
+    let service = file(&files, "service.yaml");
+    assert!(service.contains(
+        "    - name: p3000\n      port: 3000\n      targetPort: 3000\n    - name: p9901\n"
+    ));
+
+    assert!(
+        error(
+            "api { image = \"a:1\", port = 80, with = { side = { image = \"b:1\", port = 80 } } }"
+        )
+        .contains("écoutent tous deux sur le port 80")
+    );
+    assert!(
+        error("api { image = \"a:1\", with = { side = { imag = \"b:1\" } } }")
+            .contains("`api.with.side` : clé inconnue `imag` (vouliez-vous dire `image` ?)")
+    );
+    assert!(
+        error("api { image = \"a:1\", with = { side = { image = \"b:1\", replicas = 2 } } }")
+            .contains("clé inconnue `replicas`")
+    );
+    assert!(error("api { image = \"a:1\", with = [\"b:1\"] }").contains("`with` s'écrit"));
 }

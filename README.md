@@ -11,7 +11,10 @@ web { image = "nginx:1.29" }
 Une ligne : le port (80 pour nginx), le service Compose, le Deployment et le Service
 Kubernetes en sont déduits. Ports au choix : `port = 3000`, `port = "8080:80"` (publié sur 8080, l'application
 écoute sur 80) ou `ports = [80, "8443:443"]` ; deux applications ne peuvent pas publier le
-même port. Ajoutez `build = "rust"` pour un Dockerfile, `host = "exemple.fr"`
+même port. Des versions à part (`image = "postgres"`, `version = "18-alpine"`), choisies au
+besoin à la compilation (`orchestra build app.drc --set API=2.2.0`), et d'autres conteneurs
+dans le même pod (`with = { proxy = { image = "envoyproxy/envoy" } }`). Ajoutez
+`build = "rust"` pour un Dockerfile, `host = "exemple.fr"`
 pour un Ingress,
 `replicas`, `env`, `volumes`, `depends_on`… Une faute de frappe ? Le compilateur la situe et
 propose la correction :
@@ -87,7 +90,7 @@ cargo wasm && cargo run -- export dist
 | `src/wasm.rs` | `orchestra.wasm` : le compilateur dans le navigateur |
 | `src/site/` | Le site Paquets : pages, illustrations SVG, feuille de style, export statique |
 | `src/main.rs` | Le binaire `orchestra` : le site, `orchestra build` et `orchestra check` |
-| `examples/` | `simple.drc` (une ligne), `boutique.drc` (trois applications), `ports.drc` (ports au choix), `complet.drc` (les trois sections) et `projet/` (`import`) |
+| `examples/` | `simple.drc` (une ligne), `boutique.drc` (trois applications), `ports.drc` (ports au choix), `versions.drc` (versions et `with`), `complet.drc` (les trois sections) et `projet/` (`import`) |
 | `ci/mobile.mjs` | Le contrôle « aucun défilement horizontal » |
 
 ## Intégration continue

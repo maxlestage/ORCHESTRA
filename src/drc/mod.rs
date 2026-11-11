@@ -63,6 +63,10 @@ impl Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Une erreur sans position (un argument `--set`) : le message seul.
+        if self.pos.line == 0 {
+            return write!(f, "{}", self.message);
+        }
         if let Some(file) = &self.file {
             write!(f, "{file}:")?;
         }
@@ -167,8 +171,31 @@ pub fn compile(
     source: &str,
     resolver: &mut Resolver<'_>,
 ) -> Result<Vec<GeneratedFile>, Error> {
+    compile_with(name, source, resolver, &[])
+}
+
+/// Comme [`compile`], avec des variables remplacées (`--set API=2.2.0`) : chaque nom doit
+/// être une variable du projet, et la valeur garde le type de celle du fichier.
+pub fn compile_with(
+    name: &str,
+    source: &str,
+    resolver: &mut Resolver<'_>,
+    overrides: &[(String, String)],
+) -> Result<Vec<GeneratedFile>, Error> {
     let mut evaluator = eval::Evaluator::new(resolver);
+    evaluator.set_overrides(overrides);
     evaluator.file(name, source)?;
+    for (variable, _) in overrides {
+        if !evaluator.overridden.contains(variable) {
+            return Err(Error::at(
+                Pos::default(),
+                format!(
+                    "`--set {variable}=…` : aucune variable `{variable}` dans le projet{}",
+                    suggest(variable, evaluator.variables())
+                ),
+            ));
+        }
+    }
     let apps = std::mem::take(&mut evaluator.apps);
     let explicit = std::mem::take(&mut evaluator.sections);
     if apps.is_empty() && explicit.is_empty() {

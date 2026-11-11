@@ -9,7 +9,8 @@ const base = process.argv[2] ?? 'http://localhost:3000';
 const pages = ['/', '/langage', '/bac-a-sable', '/bac-a-sable/erreur', '/bac-a-sable/k8s', '/introuvable'];
 const widths = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440];
 
-const browser = await chromium.launch();
+// PW_CHANNEL=chrome : le Chrome installé sur la machine (celui des runners GitHub).
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || undefined });
 let problems = 0;
 for (const colorScheme of ['dark', 'light']) {
   const page = await browser.newPage({ colorScheme });

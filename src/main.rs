@@ -45,18 +45,28 @@ ORCHESTRA : Rust-Compose, un fichier .drc pour Docker, Compose et Kubernetes.
 
 Usage :
   orchestra                         lance le site (PORT, 3000 par défaut)
-  orchestra build <fichier.drc> [--out <dossier>]
+  orchestra build <fichier.drc> [--out <dossier>] [--set NOM=valeur…]
                                     écrit Dockerfile, docker-compose.yml et les manifests
-  orchestra check <fichier.drc>     vérifie le fichier sans rien écrire
+  orchestra check <fichier.drc> [--set NOM=valeur…]
+                                    vérifie le fichier sans rien écrire
+
+  --set NOM=valeur remplace une variable du fichier, par exemple --set API=2.2.0
   orchestra export <dossier>        le site en fichiers statiques (GitHub Pages)
                                     options : --base /chemin, --wasm fichier.wasm";
 
 fn cli(args: &[String], write: bool) -> ExitCode {
     let mut input = None;
     let mut out = PathBuf::from(".");
+    let mut overrides = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--set" => match args.next().and_then(|a| a.split_once('=')) {
+                Some((name, value)) if !name.trim().is_empty() => {
+                    overrides.push((name.trim().to_owned(), value.to_owned()));
+                }
+                _ => return usage_error("`--set` attend NOM=valeur (ex. --set API=2.2.0)"),
+            },
             "--out" | "-o" if write => match args.next() {
                 Some(dir) => out = PathBuf::from(dir),
                 None => return usage_error("`--out` attend un dossier"),
@@ -71,7 +81,7 @@ fn cli(args: &[String], write: bool) -> ExitCode {
     let Some(input) = input else {
         return usage_error("indiquez un fichier .drc");
     };
-    let files = match compile_file(&input) {
+    let files = match compile_file(&input, &overrides) {
         Ok(files) => files,
         Err(message) => {
             eprintln!("erreur : {message}");
@@ -162,18 +172,23 @@ fn usage_error(message: &str) -> ExitCode {
 }
 
 /// Compile un fichier ; ses `import` sont lus par rapport à son dossier.
-fn compile_file(path: &Path) -> Result<Vec<GeneratedFile>, String> {
+fn compile_file(path: &Path, overrides: &[(String, String)]) -> Result<Vec<GeneratedFile>, String> {
     let source = std::fs::read_to_string(path).map_err(|e| format!("{} : {e}", path.display()))?;
     let name = path.display().to_string();
-    drc::compile(&name, &source, &mut |from, import| {
-        let base = Path::new(from).parent().unwrap_or(Path::new("."));
-        let target = base.join(import);
-        let canonical = target
-            .canonicalize()
-            .map_err(|e| format!("import \"{import}\" : {e}"))?;
-        let source = std::fs::read_to_string(&canonical)
-            .map_err(|e| format!("import \"{import}\" : {e}"))?;
-        Ok((canonical.display().to_string(), source))
-    })
+    drc::compile_with(
+        &name,
+        &source,
+        &mut |from, import| {
+            let base = Path::new(from).parent().unwrap_or(Path::new("."));
+            let target = base.join(import);
+            let canonical = target
+                .canonicalize()
+                .map_err(|e| format!("import \"{import}\" : {e}"))?;
+            let source = std::fs::read_to_string(&canonical)
+                .map_err(|e| format!("import \"{import}\" : {e}"))?;
+            Ok((canonical.display().to_string(), source))
+        },
+        overrides,
+    )
     .map_err(|e| e.to_string())
 }

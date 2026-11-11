@@ -60,6 +60,10 @@ pub struct Evaluator<'r> {
     stack: Vec<String>,
     loaded: HashSet<String>,
     spent: Cell<usize>,
+    /// `--set NOM=valeur` : les valeurs qui remplacent celles des variables du fichier.
+    overrides: HashMap<String, String>,
+    /// Les variables remplacées, pour signaler un `--set` qui ne remplace rien.
+    pub overridden: HashSet<String>,
     resolver: &'r mut Resolver<'r>,
 }
 
@@ -74,8 +78,20 @@ impl<'r> Evaluator<'r> {
             stack: Vec::new(),
             loaded: HashSet::new(),
             spent: Cell::new(0),
+            overrides: HashMap::new(),
+            overridden: HashSet::new(),
             resolver,
         }
+    }
+
+    /// `--set NOM=valeur` : remplace la valeur de ces variables.
+    pub fn set_overrides(&mut self, overrides: &[(String, String)]) {
+        self.overrides = overrides.iter().cloned().collect();
+    }
+
+    /// Les noms des variables globales.
+    pub fn variables(&self) -> impl Iterator<Item = &str> {
+        self.globals.keys().map(String::as_str)
     }
 
     /// Évalue un fichier (et, récursivement, ses imports).
@@ -144,7 +160,11 @@ impl<'r> Evaluator<'r> {
                         format!("la variable `{name}` est déjà définie"),
                     ));
                 }
-                let value = self.eval(&value, &HashMap::new(), 0)?;
+                let mut value = self.eval(&value, &HashMap::new(), 0)?;
+                if let Some(text) = self.overrides.get(&name) {
+                    value = overridden(&name, text, &value)?;
+                    self.overridden.insert(name.clone());
+                }
                 self.globals.insert(name, value);
                 Ok(())
             }
@@ -323,6 +343,38 @@ impl<'r> Evaluator<'r> {
             format!("la fonction `{name}` se termine sans `return`"),
         ))
     }
+}
+
+/// La valeur de `--set NOM=texte`, du même type que la valeur écrite dans le fichier :
+/// `--set REPLICAS=5` reste un nombre, `--set VERSION=1.10` reste un texte.
+fn overridden(name: &str, text: &str, written: &Value) -> Result<Value, Error> {
+    let fail = |kind: &str| {
+        Error::at(
+            Pos::default(),
+            format!(
+                "`--set {name}={text}` : `{name}` est {kind} dans le fichier, `{text}` n'en est pas un"
+            ),
+        )
+    };
+    Ok(match written {
+        Value::Str(_) => Value::Str(text.to_owned()),
+        Value::Int(_) => Value::Int(text.trim().parse().map_err(|_| fail("un nombre entier"))?),
+        Value::Float(_) => Value::Float(text.trim().parse().map_err(|_| fail("un nombre"))?),
+        Value::Bool(_) => match text.trim() {
+            "true" => Value::Bool(true),
+            "false" => Value::Bool(false),
+            _ => return Err(fail("un booléen (true ou false)")),
+        },
+        other => {
+            return Err(Error::at(
+                Pos::default(),
+                format!(
+                    "`--set {name}=…` : `{name}` est {} ; seuls les textes, nombres et booléens se remplacent",
+                    other.type_name()
+                ),
+            ));
+        }
+    })
 }
 
 /// `a + b` : des nombres s'additionnent, des listes se suivent, des objets se
