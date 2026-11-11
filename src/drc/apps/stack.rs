@@ -23,8 +23,8 @@ pub const TECHS: &[&str] = &[
 
 /// Toutes les clés d'une pile.
 pub const KEYS: &[&str] = &[
-    "rust", "image", "version", "port", "replicas", "env", "host", "password", "nginx", "postgres",
-    "mysql", "mariadb", "mongo", "redis", "valkey",
+    "rust", "src", "image", "version", "port", "replicas", "env", "host", "password", "nginx",
+    "postgres", "mysql", "mariadb", "mongo", "redis", "valkey",
 ];
 
 /// Une pile : un bloc qui nomme au moins une technologie.
@@ -142,20 +142,33 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
     }
 
     // L'application : du code Rust à construire, ou une image toute faite.
+    // `rust = "."` (un dossier) ou `rust = "1.99-alpine"` (une variante de Rust) ;
+    // `src` donne le dossier quand la variante est écrite.
     let rust = match f.get("rust") {
         None => None,
-        Some(Value::Bool(true)) => Some(".".to_owned()),
-        Some(Value::Str(path)) if !path.trim().is_empty() => Some(path.clone()),
-        Some(other) => {
+        Some(Value::Bool(true)) => Some((".".to_owned(), super::RUST_DEFAULT.to_owned())),
+        Some(Value::Str(path)) if path.starts_with(['.', '/']) => {
+            Some((path.clone(), super::RUST_DEFAULT.to_owned()))
+        }
+        Some(Value::Str(tag)) if super::rust_tag(tag) => {
+            let src = f.text("src")?.unwrap_or(".").to_owned();
+            Some((src, tag.clone()))
+        }
+        Some(_) => {
             return Err(f.err(
                 "rust",
-                format!(
-                    "`rust` est le dossier du code (ex. `rust = \".\"`), pas {}",
-                    other.type_name()
-                ),
+                "`rust` est le dossier du code (`rust = \".\"`) ou une variante de Rust (`rust = \"1.99-alpine\"`, `rust = \"1.99-slim-bookworm\"`)",
             ));
         }
     };
+    if f.get("src").is_some()
+        && !matches!(f.get("rust"), Some(Value::Str(t)) if !t.starts_with(['.', '/']))
+    {
+        return Err(f.err(
+            "src",
+            "`src` est le dossier du code quand `rust` donne une variante (ex. `rust = \"1.99-alpine\"`, `src = \"./api\"`)",
+        ));
+    }
     if rust.is_none() && f.get("image").is_none() {
         return Err(f.err(
             "image",
@@ -278,8 +291,8 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
     );
     push(&mut out.k8s, "service", k8s_service(name, port, port));
 
-    if let Some(path) = &rust {
-        out.dockerfile = Some(dockerfile(path, port));
+    if let Some((path, tag)) = &rust {
+        out.dockerfile = Some(dockerfile(path, tag, port));
     }
 
     // --- nginx, devant l'application.
@@ -622,9 +635,10 @@ fn nginx_conf(app: &str, port: i64) -> String {
 }
 
 /// Le Dockerfile du code Rust : `cargo install` construit le binaire, quel que soit son nom.
-fn dockerfile(path: &str, port: i64) -> Value {
+fn dockerfile(path: &str, tag: &str, port: i64) -> Value {
+    let (base, run) = super::rust_images(tag);
     obj([
-        ("base", s(super::RUST_BUILD)),
+        ("base", s(base)),
         ("workdir", s("/app")),
         (
             "copy",
@@ -637,7 +651,7 @@ fn dockerfile(path: &str, port: i64) -> Value {
                 "mv /out/bin/* /app/server".to_owned(),
             ]),
         ),
-        ("from", s(super::RUST_RUN)),
+        ("from", s(run)),
         ("artifacts", list(&["server".to_owned()])),
         ("env", obj([("PORT", Value::Int(port))])),
         ("expose", Value::List(vec![Value::Int(port)])),

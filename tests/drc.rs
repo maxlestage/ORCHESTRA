@@ -535,3 +535,65 @@ fn stack_options_and_mistakes() {
             .contains("déjà publié par `web`")
     );
 }
+
+#[test]
+fn rust_variants_choose_the_matching_runtime() {
+    let froms = |source: &str| -> String {
+        let files = drc::compile_str(source).unwrap();
+        file(&files, "Dockerfile")
+            .lines()
+            .filter(|l| l.starts_with("FROM"))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    assert_eq!(
+        froms("web { rust = \".\" }"),
+        "FROM rust:1.99-slim AS build | FROM debian:trixie-slim"
+    );
+    assert_eq!(
+        froms("web { rust = \"1.99-slim-bookworm\" }"),
+        "FROM rust:1.99-slim-bookworm AS build | FROM debian:bookworm-slim"
+    );
+    assert_eq!(
+        froms("web { rust = \"1.99-alpine\" }"),
+        "FROM rust:1.99-alpine AS build | FROM alpine:3.24"
+    );
+    assert_eq!(
+        froms("web { rust = \"1.99-alpine3.22\" }"),
+        "FROM rust:1.99-alpine3.22 AS build | FROM alpine:3.22"
+    );
+    assert_eq!(
+        froms("web { rust = \"1.99-bullseye\" }"),
+        "FROM rust:1.99-bullseye AS build | FROM debian:bullseye-slim"
+    );
+    // Le dossier du code, quand la variante est écrite.
+    let files = drc::compile_str("web { rust = \"1.99-alpine\", src = \"./api\" }").unwrap();
+    assert!(file(&files, "Dockerfile").contains("COPY ./api .\n"));
+    // Les applications simples : `build = "rust:…"`.
+    assert_eq!(
+        froms("site { build = \"rust:1.99-slim-bookworm\", port = 8080 }"),
+        "FROM rust:1.99-slim-bookworm AS build | FROM debian:bookworm-slim"
+    );
+    let files = drc::compile_str("site { build = \"rust:1.99-alpine\", port = 8080 }").unwrap();
+    assert!(
+        file(&files, "docker-compose.yml")
+            .contains("  site:\n    build: .\n    image: site:latest\n")
+    );
+
+    // Les variantes des services : la valeur est le tag.
+    let files = drc::compile_str(
+        "web { rust = \".\", nginx = \"1.29-alpine\", postgres = \"18-alpine\", redis = \"8-alpine\" }",
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    for image in ["nginx:1.29-alpine", "postgres:18-alpine", "redis:8-alpine"] {
+        assert!(compose.contains(&format!("image: {image}\n")), "{image}");
+    }
+
+    assert!(error("web { rust = \"1.99 alpine\" }").contains("variante de Rust"));
+    assert!(
+        error("web { rust = \".\", src = \"./api\" }")
+            .contains("`src` est le dossier du code quand")
+    );
+    assert!(error("site { build = \"rust:\" }").contains("attend une variante de Rust"));
+}

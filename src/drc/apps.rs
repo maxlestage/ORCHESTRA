@@ -40,9 +40,37 @@ pub const KEYS: &[&str] = &[
 /// Les clés d'un conteneur d'accompagnement (`with`).
 pub const WITH_KEYS: &[&str] = &["image", "version", "port", "ports", "env", "command"];
 
-/// Les images du Dockerfile de `build = "rust"`.
-const RUST_BUILD: &str = "rust:1.99-slim";
-const RUST_RUN: &str = "debian:trixie-slim";
+/// La variante de Rust quand aucune n'est écrite (`build = "rust"`, `rust = "."`).
+const RUST_DEFAULT: &str = "1.99-slim";
+/// L'image d'exécution des binaires construits sur alpine, sans version d'alpine écrite.
+const ALPINE: &str = "alpine:3.24";
+
+/// Une variante de l'image `rust` : `1.99`, `1.99-alpine`, `1.99-slim-bookworm`…
+fn rust_tag(tag: &str) -> bool {
+    !tag.is_empty() && !tag.contains([' ', ':', '/'])
+}
+
+/// Les images de construction et d'exécution d'une variante de Rust. L'image d'exécution
+/// est de la même famille : un binaire construit sur bookworm tourne sur bookworm, un
+/// binaire construit sur alpine (musl) sur alpine.
+fn rust_images(tag: &str) -> (String, String) {
+    let run = if let Some(at) = tag.find("alpine") {
+        let version = &tag[at + "alpine".len()..];
+        if !version.is_empty() && version.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            format!("alpine:{version}")
+        } else {
+            ALPINE.to_owned()
+        }
+    } else if tag.contains("bookworm") {
+        "debian:bookworm-slim".to_owned()
+    } else if tag.contains("bullseye") {
+        "debian:bullseye-slim".to_owned()
+    } else {
+        // Les images `rust` sans distribution écrite sont construites sur trixie.
+        "debian:trixie-slim".to_owned()
+    };
+    (format!("rust:{tag}"), run)
+}
 
 /// Les sections générées par les applications, complétées par les sections écrites.
 pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<SectionValue>, Error> {
@@ -508,7 +536,9 @@ struct App<'a> {
     main: Container,
     /// Les conteneurs du même pod (`with`), dans l'ordre écrit.
     with: Vec<Container>,
-    /// `build = "rust"` : un Dockerfile Rust ; un autre texte : le dossier de construction.
+    /// `build = "rust"` ou `"rust:1.99-alpine"` : la variante de Rust du Dockerfile.
+    rust: Option<String>,
+    /// Un autre `build` : le dossier de construction Compose.
     build: Option<&'a str>,
     replicas: i64,
     volumes: Vec<String>,
@@ -546,6 +576,20 @@ impl<'a> App<'a> {
         f.check_keys(KEYS)?;
 
         let build = f.text("build")?;
+        let rust = match build {
+            Some("rust") => Some(RUST_DEFAULT.to_owned()),
+            Some(b) => match b.strip_prefix("rust:") {
+                Some(tag) if rust_tag(tag) => Some(tag.to_owned()),
+                Some(_) => {
+                    return Err(f.err(
+                        "build",
+                        "`build = \"rust:…\"` attend une variante de Rust, par exemple `\"rust:1.99-alpine\"`",
+                    ));
+                }
+                None => None,
+            },
+            None => None,
+        };
         let image = f.image(build.map(|_| name.to_owned()))?;
         let main = Container {
             name: name.to_owned(),
@@ -654,7 +698,8 @@ impl<'a> App<'a> {
         Ok(Self {
             main,
             with,
-            build,
+            build: build.filter(|_| rust.is_none()),
+            rust,
             replicas,
             volumes: f.words("volumes")?,
             depends_on,
@@ -690,12 +735,10 @@ impl<'a> App<'a> {
     }
 
     fn dockerfile(&self) -> Option<Value> {
-        if self.build != Some("rust") {
-            return None;
-        }
+        let (base, run) = rust_images(self.rust.as_deref()?);
         let binary = format!("target/release/{}", self.main.name);
         let mut docker = vec![
-            ("base".to_owned(), s(RUST_BUILD)),
+            ("base".to_owned(), s(base)),
             ("workdir".to_owned(), s("/app")),
             (
                 "copy".to_owned(),
@@ -705,7 +748,7 @@ impl<'a> App<'a> {
                 "build".to_owned(),
                 Value::List(vec![s("cargo build --release")]),
             ),
-            ("from".to_owned(), s(RUST_RUN)),
+            ("from".to_owned(), s(run)),
             ("artifacts".to_owned(), Value::List(vec![s(binary.clone())])),
         ];
         if !self.main.ports.is_empty() {
@@ -725,10 +768,10 @@ impl<'a> App<'a> {
     fn services(&self) -> Vec<(String, Value)> {
         let name = &self.main.name;
         let mut service = Vec::new();
-        match self.build {
-            Some("rust") => service.push(("build".to_owned(), s("."))),
-            Some(dir) => service.push(("build".to_owned(), s(dir))),
-            None => {}
+        match (&self.rust, self.build) {
+            (Some(_), _) => service.push(("build".to_owned(), s("."))),
+            (None, Some(dir)) => service.push(("build".to_owned(), s(dir))),
+            (None, None) => {}
         }
         service.push(("image".to_owned(), s(self.main.image.clone())));
         if !self.main.command.is_empty() {
