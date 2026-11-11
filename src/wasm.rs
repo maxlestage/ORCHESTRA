@@ -2,7 +2,7 @@
 //! générée. Le JavaScript du bac à sable écrit le texte dans la mémoire du module
 //! (`alloc`), appelle `render`, puis lit le HTML produit (`out_ptr`, `out_len`).
 //!
-//!     cargo build --lib --target wasm32-unknown-unknown --profile wasm
+//!     cargo wasm
 
 use std::cell::RefCell;
 

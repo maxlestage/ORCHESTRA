@@ -1,0 +1,3 @@
+[alias]
+# Le compilateur du navigateur (orchestra.wasm) : `cargo wasm`.
+wasm = "build --lib --target wasm32-unknown-unknown --profile wasm"

@@ -62,20 +62,14 @@ En production : `docker build -t orchestra . && docker run -p 8080:8080 orchestr
 
 ## GitHub Pages
 
-Le workflow `.github/workflows/pages.yml` publie le site sur
-**https://maxlestage.github.io/ORCHESTRA/** à chaque mise à jour de `master` (et à la demande,
-onglet *Actions* → *GitHub Pages* → *Run workflow*). À activer une seule fois : *Settings* →
-*Pages* → *Build and deployment* → *Source* : **GitHub Actions**.
+Poussez sur `master` : le site est publié sur **https://maxlestage.github.io/ORCHESTRA/**.
+C'est tout.
 
-Le workflow compile le compilateur en WebAssembly, puis exporte chaque page en HTML statique :
+Le même site, en local :
 
 ```sh
-cargo build --lib --target wasm32-unknown-unknown --profile wasm   # orchestra.wasm
-cargo run -- export dist --base /ORCHESTRA                         # dist/ : le site statique
+cargo wasm && cargo run -- export dist
 ```
-
-Sur GitHub Pages, le bac à sable compile dans le navigateur ; l'API `POST /api/compile` n'existe
-qu'avec le serveur (Docker, Heroku).
 
 ## Organisation
 

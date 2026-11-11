@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use super::{app, examples};
 
-/// Où `cargo build --lib --target wasm32-unknown-unknown --profile wasm` écrit le module.
+/// Où `cargo wasm` écrit le module.
 pub const WASM: &str = "target/wasm32-unknown-unknown/wasm/orchestra.wasm";
 
 /// Ce que l'export a écrit.
@@ -83,6 +83,17 @@ pub async fn export(out: &Path, base: &str, wasm: &Path) -> io::Result<Report> {
         report.wasm = true;
     }
     Ok(report)
+}
+
+/// Le chemin du site sur GitHub Pages, d'après le dépôt (`owner/nom`) : `/nom`, ou rien
+/// pour le site principal `owner.github.io` et hors de GitHub Actions.
+pub fn default_base(repository: Option<&str>) -> String {
+    match repository.and_then(|r| r.split_once('/')) {
+        Some((owner, name)) if !name.eq_ignore_ascii_case(&format!("{owner}.github.io")) => {
+            format!("/{name}")
+        }
+        _ => String::new(),
+    }
 }
 
 /// `ORCHESTRA`, `/ORCHESTRA/` → `/ORCHESTRA` ; `/` ou rien → `""`.
@@ -161,6 +172,9 @@ mod tests {
         assert_eq!(normalize_base("ORCHESTRA/").unwrap(), "/ORCHESTRA");
         assert_eq!(normalize_base("/").unwrap(), "");
         assert!(normalize_base("a\"b").is_err());
+        assert_eq!(default_base(Some("maxlestage/ORCHESTRA")), "/ORCHESTRA");
+        assert_eq!(default_base(Some("maxlestage/maxlestage.github.io")), "");
+        assert_eq!(default_base(None), "");
     }
 
     #[tokio::test]
