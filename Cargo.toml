@@ -1,0 +1,28 @@
+[package]
+name = "orchestra"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Rust-Compose : un langage déclaratif compilé en Dockerfile, docker-compose.yml et manifests Kubernetes, et son site écrit avec Paquets."
+default-run = "orchestra"
+
+# La bibliothèque est le compilateur Rust-Compose (sans dépendance) ; le binaire
+# est à la fois le site (Paquets) et l'outil en ligne de commande `orchestra build`.
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "orchestra"
+path = "src/main.rs"
+
+[dependencies]
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.54", features = ["macros", "rt-multi-thread"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

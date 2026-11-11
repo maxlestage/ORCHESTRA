@@ -1,0 +1,22 @@
+# Rust-Compose 1.0
+import "../config.drc"
+
+docker {
+    base = "rust:1.99-slim"
+    workdir = "/app"
+    copy = [
+        { src = "./src", dst = "src" },
+        { src = "./Cargo.toml", dst = "." }
+    ]
+    build = ["cargo build --release", "cp target/release/myapp ./myapp"]
+    from = "debian:trixie-slim"
+    artifacts = ["myapp"]
+    run = ["./myapp"]
+    expose = ["8080/tcp"]
+}
+
+compose {
+    services = {
+        web = { image = image_tag("latest"), ports = ["8080:80"] }
+    }
+}
