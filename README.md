@@ -37,6 +37,10 @@ web {
 nginx renvoie vers l'application, qui reçoit `DATABASE_URL` et `REDIS_URL` ; la base garde ses
 données (volume, StatefulSet Kubernetes) et son mot de passe (`password`, Secret Kubernetes).
 
+La variante s'écrit dans la valeur : `postgres = "18-alpine"`, `nginx = "1.29-alpine"`. Pour le
+code Rust, `rust = "1.99-slim-bookworm"` ou `rust = "1.99-alpine"` : l'image d'exécution de la
+même famille (`debian:bookworm-slim`, `alpine:3.24`) est choisie pour vous.
+
 Les sections `docker`, `compose` et `k8s` de la spécification complète restent disponibles
 pour tout le reste (voir `examples/complet.drc`).
 

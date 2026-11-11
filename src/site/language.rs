@@ -123,7 +123,7 @@ fn apps() -> Vec<Node> {
         ("version", "texte", "La version de l'image, écrite à part : <code>image = \"postgres\"</code>, <code>version = \"18-alpine\"</code>. Avec <code>build</code>, la version de l'image construite (<code>latest</code> sinon)."),
         ("port", "nombre ou texte", "<code>3000</code> : le même dehors et dedans. <code>\"8080:80\"</code> : publié sur 8080, l'application écoute sur 80. Déduit pour les images courantes (nginx 80, postgres 5432, redis 6379…), où un nombre seul est le port public : <code>port = 8080</code> publie nginx sur 8080. <code>false</code> pour aucun."),
         ("ports", "liste", "Plusieurs ports : <code>[80, \"8443:443\"]</code>. Deux applications ne peuvent pas publier le même port : le compilateur le refuse et en propose un libre."),
-        ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app). Un autre texte : le dossier de construction Compose."),
+        ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app) ; <code>\"rust:1.99-alpine\"</code> ou <code>\"rust:1.99-slim-bookworm\"</code> pour choisir la variante. Un autre texte : le dossier de construction Compose."),
         ("replicas", "nombre", "Le nombre d'instances Kubernetes (1 par défaut)."),
         ("env", "objet", "Les variables d'environnement : <code>{ CLE = \"valeur\" }</code>."),
         ("command", "texte ou liste", "La commande lancée à la place de celle de l'image."),
@@ -152,7 +152,7 @@ fn apps() -> Vec<Node> {
 
 fn stack() -> Vec<Node> {
     let techs: Vec<Vec<String>> = [
-        ("rust", "<code>\".\"</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. À la place : <code>image = \"…\"</code> pour une application déjà construite."),
+        ("rust", "<code>\".\"</code> ou <code>\"1.99-alpine\"</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. <code>\".\"</code> est le dossier du code ; une variante (<code>\"1.99-slim-bookworm\"</code>, <code>\"1.99-alpine\"</code>…) choisit l'image Rust, et l'image d'exécution de la même famille est prise pour vous (<code>src</code> donne alors le dossier). À la place : <code>image = \"…\"</code> pour une application déjà construite."),
         ("nginx", "<code>\"1.29\"</code>", "Devant l'application, sur le port 80 : sa configuration de proxy est écrite pour vous (ConfigMap dans Kubernetes)."),
         ("postgres", "<code>\"18\"</code>", "<code>DATABASE_URL</code> pour l'application ; données dans un volume (StatefulSet et volume persistant dans Kubernetes)."),
         ("mysql, mariadb", "<code>\"9.5\"</code>, <code>\"12\"</code>", "<code>DATABASE_URL</code> (<code>mysql://…</code>), données gardées de même."),
@@ -183,6 +183,35 @@ fn stack() -> Vec<Node> {
             "nginx renvoie vers l'application ; l'application reçoit <code>DATABASE_URL</code> et <code>REDIS_URL</code> ; seul nginx est publié (port 80), la base et le cache restent internes. Dans Kubernetes, la base devient un StatefulSet avec son volume, et son mot de passe un Secret.",
         ),
         table(&["Technologie", "Valeur", "Ce qu'elle apporte"], &techs),
+        h3().text("Choisir la variante").into(),
+        para(
+            "La valeur est le tag de l'image, variante comprise : <code>nginx = \"1.29-alpine\"</code>, <code>postgres = \"18-alpine\"</code>, <code>redis = \"8-alpine\"</code>. Pour le code Rust, écrivez la variante de Rust : l'image d'exécution suit, pour que le binaire tourne là où il a été construit.",
+        ),
+        table(
+            &["Vous écrivez", "Construit avec", "Tourne sur"],
+            &rows(&[
+                &[
+                    "<code>rust = \".\"</code>",
+                    "<code>rust:1.99-slim</code>",
+                    "<code>debian:trixie-slim</code>",
+                ],
+                &[
+                    "<code>rust = \"1.99-slim-bookworm\"</code>",
+                    "<code>rust:1.99-slim-bookworm</code>",
+                    "<code>debian:bookworm-slim</code>",
+                ],
+                &[
+                    "<code>rust = \"1.99-alpine\"</code>",
+                    "<code>rust:1.99-alpine</code>",
+                    "<code>alpine:3.24</code>",
+                ],
+                &[
+                    "<code>rust = \"1.99-alpine3.22\"</code>",
+                    "<code>rust:1.99-alpine3.22</code>",
+                    "<code>alpine:3.22</code>",
+                ],
+            ]),
+        ),
         table(&["Option", "Rôle"], &options),
     ]
 }
