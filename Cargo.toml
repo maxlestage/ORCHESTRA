@@ -11,13 +11,17 @@ default-run = "orchestra"
 # est à la fois le site (Paquets) et l'outil en ligne de commande `orchestra build`.
 [lib]
 path = "src/lib.rs"
+# `cdylib` : orchestra.wasm, le compilateur du bac à sable sur GitHub Pages.
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "orchestra"
 path = "src/main.rs"
 
-[dependencies]
+# Le site et l'outil (le compilateur seul, et sa version WebAssembly, n'ont aucune dépendance).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false }
+tokio = { version = "1.54", features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 tokio = { version = "1.54", features = ["macros", "rt-multi-thread"] }
@@ -26,3 +30,10 @@ tokio = { version = "1.54", features = ["macros", "rt-multi-thread"] }
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Le compilateur du navigateur : `cargo build --lib --target wasm32-unknown-unknown --profile wasm`.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+panic = "abort"

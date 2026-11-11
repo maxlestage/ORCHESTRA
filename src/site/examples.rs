@@ -172,9 +172,3 @@ k8s {
 "#,
     },
 ];
-
-/// L'exemple d'identifiant `id`, ou le premier.
-pub fn find(id: Option<&str>) -> &'static Example {
-    id.and_then(|id| ALL.iter().find(|e| e.id == id))
-        .unwrap_or(&ALL[0])
-}

@@ -2,10 +2,11 @@
 // en clair et en sombre, avec tous les blocs dépliés.
 //
 //   node ci/mobile.mjs http://localhost:3000
+//   node ci/mobile.mjs https://maxlestage.github.io/ORCHESTRA   (le site publié)
 import { chromium } from 'playwright';
 
 const base = process.argv[2] ?? 'http://localhost:3000';
-const pages = ['/', '/langage', '/bac-a-sable', '/bac-a-sable?exemple=erreur', '/bac-a-sable?exemple=k8s', '/introuvable'];
+const pages = ['/', '/langage', '/bac-a-sable', '/bac-a-sable/erreur', '/bac-a-sable/k8s', '/introuvable'];
 const widths = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440];
 
 const browser = await chromium.launch();

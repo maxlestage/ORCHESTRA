@@ -489,6 +489,9 @@ details.file[open] .code { animation: unfold .35s ease both; }
 }
 .editor textarea:focus { outline: 3px solid color-mix(in oklab, var(--rust) 60%, transparent); outline-offset: 2px; }
 .editor .actions { margin-top: 1rem; }
+.live-hint { display: none; margin-top: .75rem; font-size: .9rem; }
+.live-hint::before { content: ""; display: inline-block; width: .55rem; height: .55rem; margin-right: .5rem; border-radius: 50%; background: var(--k8s); animation: pulse 1.6s ease-in-out infinite; }
+.editor.live + .live-hint { display: block; }
 .status {
   display: flex;
   align-items: center;
@@ -575,6 +578,7 @@ details.file[open] .code { animation: unfold .35s ease both; }
 @keyframes conduct { 0%, 100% { transform: rotate(-14deg); } 50% { transform: rotate(18deg); } }
 @keyframes write { 0% { transform: scaleX(.15); opacity: .4; } 35%, 80% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: .4; } }
 @keyframes blink { 50% { opacity: 0; } }
+@keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
 @keyframes bob { 50% { transform: translateY(-6px); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes stack { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }

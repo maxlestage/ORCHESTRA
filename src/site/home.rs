@@ -176,7 +176,7 @@ fn cli() -> Element {
             format!(
                 "<span class=\"term-line\" style=\"--d:{:.1}s\">{}</span>",
                 0.6 + i as f32 * 0.7,
-                super::highlight::shell(line)
+                orchestra::render::highlight::shell(line)
             )
         })
         .collect();
