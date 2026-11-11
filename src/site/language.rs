@@ -118,7 +118,7 @@ fn objective() -> Vec<Node> {
 fn apps() -> Vec<Node> {
     let keys: Vec<Vec<String>> = [
         ("image", "texte", "L'image du conteneur. Obligatoire, sauf avec <code>build</code>."),
-        ("port", "nombre", "Le port de l'application : publié par Compose, un Service Kubernetes."),
+        ("port", "nombre", "Le port de l'application : publié par Compose, un Service Kubernetes. Déduit pour les images courantes (nginx 80, postgres 5432, redis 6379…) ; <code>false</code> pour aucun."),
         ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app). Un autre texte : le dossier de construction Compose."),
         ("replicas", "nombre", "Le nombre d'instances Kubernetes (1 par défaut)."),
         ("env", "objet", "Les variables d'environnement : <code>{ CLE = \"valeur\" }</code>."),
@@ -132,8 +132,9 @@ fn apps() -> Vec<Node> {
     .collect();
     vec![
         h2_id("app", "L'essentiel : app"),
-        para("Une application s'écrit en quatre lignes. Le compilateur en déduit le service Compose, le Deployment et le Service Kubernetes, avec leurs labels et leur selector :"),
-        drc("app web {\n    image = \"nginx:1.29\"\n    port = 80\n}"),
+        para("Une application s'écrit en une ligne : un nom, une image. Le compilateur en déduit le port, le service Compose, le Deployment et le Service Kubernetes, avec leurs labels et leur selector :"),
+        drc("web { image = \"nginx:1.29\" }"),
+        para("Aucun mot-clé n'est nécessaire : un nom suivi de <code>{ … }</code> est une application, un nom suivi de <code>=</code> une variable. Les formes longues <code>app web { … }</code> et <code>var X = …</code> restent valides."),
         para("Plusieurs applications, un Dockerfile Rust, un nom de domaine :"),
         drc(include_str!("../../examples/boutique.drc")),
         table(&["Clé", "Type", "Rôle"], &keys),
@@ -169,9 +170,14 @@ fn syntax() -> Vec<Node> {
             &["Élément", "Format", "Exemple"],
             &rows(&[
                 &[
+                    "Application",
+                    "<code>&lt;nom&gt; { … }</code>",
+                    "<code>web { image = \"nginx:1.29\" }</code>",
+                ],
+                &[
                     "Variable",
-                    "<code>var &lt;nom&gt; = &lt;valeur&gt;</code>",
-                    "<code>var IMAGE_NAME = \"myapp\"</code>",
+                    "<code>[var] &lt;nom&gt; = &lt;valeur&gt;</code>",
+                    "<code>IMAGE_NAME = \"myapp\"</code>",
                 ],
                 &[
                     "Fonction",
@@ -465,7 +471,7 @@ fn checks() -> Vec<Node> {
         )
         .into(),
         pre().class("code").child(code().html(
-            "<span class=\"t-comment\">$ orchestra check app.drc</span>\nerreur : app.drc:2:5 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)",
+            "<span class=\"t-comment\">$ orchestra check app.drc</span>\nerreur : app.drc:2:5 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)",
         ))
         .into(),
     ]

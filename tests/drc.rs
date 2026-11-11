@@ -161,7 +161,7 @@ fn runaway_programs_are_stopped() {
 }
 
 #[test]
-fn an_app_in_four_lines() {
+fn an_app_in_one_line() {
     let files = drc::compile_str(include_str!("../examples/simple.drc")).unwrap();
     let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(
@@ -206,13 +206,13 @@ fn several_apps_with_a_rust_build_and_a_host() {
     let deployment = file(&files, "deployment.yaml");
     assert_eq!(deployment.matches("kind: Deployment").count(), 3);
     assert!(deployment.contains("  replicas: 3\n"));
-    // La base n'a pas de port : pas de Service pour elle.
-    assert_eq!(
-        file(&files, "service.yaml")
-            .matches("kind: Service")
-            .count(),
-        2
-    );
+    // Le port de postgres est déduit : la base a aussi son Service.
+    let services = file(&files, "service.yaml");
+    assert_eq!(services.matches("kind: Service").count(), 3);
+    assert!(services.contains(
+        "    - port: 5432
+"
+    ));
     assert!(file(&files, "ingress.yaml").contains("    - host: boutique.example.com\n"));
 }
 
@@ -234,6 +234,29 @@ fn apps_and_hand_written_sections_together() {
 }
 
 #[test]
+fn keywords_are_optional_and_ports_are_known() {
+    let files = drc::compile_str(
+        "TAG = \"7\"\ncache { image = \"redis:\" + TAG }\nworker { image = \"acme/worker:1\" }\nlb { image = \"nginx:1.29\", port = false }",
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("  cache:\n    image: redis:7\n    ports:\n      - \"6379:6379\"\n"));
+    assert!(compose.contains("  worker:\n    image: acme/worker:1\n  lb:"));
+    let services = file(&files, "service.yaml");
+    assert_eq!(services.matches("kind: Service").count(), 1);
+    // `app` et `var` restent acceptés.
+    assert!(drc::compile_str("var X = \"nginx:1.29\"\napp web { image = X }").is_ok());
+    // Un nom proche d'un mot-clé est une faute de frappe, pas une application.
+    assert!(error("dokcer { base = \"a\" }").contains("vouliez-vous dire `docker`"));
+    assert!(
+        drc::compile_str(
+            "api { image = \"a:1\" }\nweb { image = \"b:1\" }\ndb { image = \"postgres:18\" }"
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn writing_is_forgiving_and_errors_help() {
     // `+`, fonction d'une ligne, virgules facultatives.
     let files = drc::compile_str(
@@ -244,9 +267,11 @@ fn writing_is_forgiving_and_errors_help() {
     assert!(compose.contains("image: nginx:2\n"));
     assert!(compose.contains("      - nginx\n      - \"-g\"\n      - daemon off;\n"));
 
-    assert!(error("app web {\n  imgae = \"nginx\"\n}").starts_with(
-        "main.drc:2:3 : `app web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)"
-    ));
+    assert!(
+        error("app web {\n  imgae = \"nginx\"\n}").starts_with(
+            "main.drc:2:3 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)"
+        )
+    );
     assert!(error("app web { port = 80 }").contains("a besoin d'une image"));
     assert!(error("app Web { image = \"x\" }").contains("minuscules"));
     assert!(

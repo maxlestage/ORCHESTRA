@@ -3,11 +3,11 @@
 //! ```text
 //! fichier   = { item }
 //! item      = "import" chaîne
-//!           | "var" nom "=" expr
+//!           | [ "var" ] nom "=" expr
 //!           | "fn" nom "(" [ nom { "," nom } ] ")" ( "=" expr | "{" { instr } "}" )
-//!           | "app" ( nom | chaîne ) objet
+//!           | [ "app" ] nom objet               (`app "nom"` aussi)
 //!           | section [ "=" ] objet           (section = docker | compose | k8s)
-//! instr     = "var" nom "=" expr | "return" expr
+//! instr     = [ "var" ] nom "=" expr | "return" expr
 //! expr      = terme { "+" terme }
 //! terme     = chaîne | nombre | true | false | liste | objet
 //!           | nom | nom "(" args ")" | nom "!" "(" args ")"
@@ -235,6 +235,47 @@ impl Parser<'_> {
             let body = self.expr()?;
             return Ok(Item::Section { section, body, pos });
         }
+        // Sans mot-clé : `web { … }` est une application, `VERSION = "1.0"` une variable.
+        let bare =
+            !DECLARATIONS.contains(&keyword.as_str()) && !RESERVED.contains(&keyword.as_str());
+        let next = self.peek_at(1).clone();
+        if bare && matches!(next, Tok::LBrace | Tok::Eq) {
+            // `dokcer { … }` est une faute de frappe, pas une application nommée dokcer.
+            // (une seule lettre d'écart, et des mots d'au moins 4 lettres : `api`, `worker`
+            // ou `db` sont des noms d'application).
+            let hint = ["docker", "compose", "import"]
+                .into_iter()
+                .find(|k| keyword.chars().count() >= 4 && super::distance(&keyword, k) == 1)
+                .map(|k| format!(" (vouliez-vous dire `{k}` ?)"))
+                .unwrap_or_default();
+            if !hint.is_empty() {
+                let explicit = if next == Tok::LBrace {
+                    format!("`app {keyword} {{ … }}`")
+                } else {
+                    format!("`var {keyword} = …`")
+                };
+                return Err(Error::at(
+                    pos,
+                    format!("`{keyword}`{hint} ; si ce nom est voulu, écrivez {explicit}"),
+                ));
+            }
+            self.at += 1;
+            if next == Tok::LBrace {
+                let body = self.expr()?;
+                return Ok(Item::App {
+                    name: keyword,
+                    body,
+                    pos,
+                });
+            }
+            self.at += 1;
+            let value = self.expr()?;
+            return Ok(Item::Var {
+                name: keyword,
+                value,
+                pos,
+            });
+        }
         match keyword.as_str() {
             "app" => {
                 self.at += 1;
@@ -346,8 +387,14 @@ impl Parser<'_> {
                 self.at += 1;
                 Ok(Stmt::Return(self.expr()?))
             }
-            Tok::Ident(word) if word == "var" => {
-                self.at += 1;
+            // `x = …` ou `var x = …`
+            Tok::Ident(word)
+                if word == "var"
+                    || (self.peek_at(1) == &Tok::Eq && !RESERVED.contains(&word.as_str())) =>
+            {
+                if word == "var" {
+                    self.at += 1;
+                }
                 let (name, _) = self.name("nom de variable")?;
                 self.expect(Tok::Eq, "après le nom de la variable")?;
                 Ok(Stmt::Var {

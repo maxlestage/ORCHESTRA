@@ -28,10 +28,10 @@ fn hero() -> Element {
                 div()
                     .child(span().class("eyebrow").text("Rust‑Compose 1.0"))
                     .child(h1().html(
-                        "Quatre lignes.<br/><span class=\"grad\">Trois cibles.</span>",
+                        "Une ligne.<br/><span class=\"grad\">Trois cibles.</span>",
                     ))
                     .child(p().class("lead").text(
-                        "Une image, un port : c'est tout ce qu'il faut écrire. ORCHESTRA en déduit le docker-compose.yml, les manifests Kubernetes et, si besoin, le Dockerfile.",
+                        "Un nom et une image : c'est tout ce qu'il faut écrire. ORCHESTRA en déduit le docker-compose.yml, les manifests Kubernetes et, si besoin, le Dockerfile.",
                     ))
                     .child(
                         div()
@@ -61,14 +61,14 @@ fn how() -> Element {
             .child(span().class("eyebrow").text("Comment ça marche"))
             .child(h2().class("section-title").text("De la partition à la scène"))
             .child(p().class("lead").text(
-                "Une application s'écrit en quatre lignes ; le Deployment, le Service et le service Compose en sont déduits.",
+                "Une application s'écrit en une ligne ; le port, le Deployment, le Service et le service Compose en sont déduits.",
             ))
             .child(
                 ol().class("steps")
                     .child(step(
                         art::STEP_WRITE,
                         "Écrire",
-                        "<code>app web { image = \"nginx:1.29\", port = 80 }</code>. Le reste est déduit.",
+                        "<code>web { image = \"nginx:1.29\" }</code>. Le reste est déduit.",
                     ))
                     .child(step(
                         art::STEP_COMPILE,
@@ -139,7 +139,7 @@ fn demo() -> Element {
             .child(span().class("eyebrow").text("En direct"))
             .child(h2().class("section-title").text("Ce que produit le compilateur"))
             .child(p().class("lead").text(
-                "Quatre lignes à gauche ; à droite, les fichiers générés à l'instant par le compilateur du site.",
+                "Une ligne à gauche ; à droite, les fichiers générés à l'instant par le compilateur du site.",
             ))
             .child(
                 div()

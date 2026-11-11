@@ -120,7 +120,7 @@ pub(crate) fn suggest<'a>(word: &str, candidates: impl IntoIterator<Item = &'a s
 
 /// La distance d'édition entre deux mots (insertions, suppressions, substitutions et
 /// inversions de deux lettres voisines).
-fn distance(a: &str, b: &str) -> usize {
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut d = vec![vec![0usize; b.len() + 1]; a.len() + 1];
@@ -174,7 +174,7 @@ pub fn compile(
     if apps.is_empty() && explicit.is_empty() {
         return Err(Error::at(
             Pos { line: 1, col: 1 },
-            "rien à générer : ajoutez une application (`app web { image = \"nginx:1.29\", port = 80 }`) ou une section `docker`, `compose` ou `k8s`",
+            "rien à générer : ajoutez une application, par exemple `web { image = \"nginx:1.29\" }`",
         )
         .in_file(name));
     }
