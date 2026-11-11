@@ -15,6 +15,7 @@ pub async fn page(_req: Request) -> Page {
             Node::from(how()),
             Node::from(principles()),
             Node::from(demo()),
+            Node::from(web()),
             Node::from(cli()),
         ]),
     )
@@ -130,32 +131,62 @@ fn principles() -> Element {
 }
 
 fn demo() -> Element {
-    // L'exemple est compilé à chaque rendu : ce que montre la page est exactement
-    // ce que produit le compilateur.
-    let files = drc::compile_str(examples::HOME).unwrap_or_default();
+    live(
+        "En direct",
+        "Ce que produit le compilateur",
+        "Une ligne à gauche ; à droite, les fichiers générés à l'instant par le compilateur du site.",
+        examples::HOME,
+        "/bac-a-sable",
+    )
+}
+
+fn web() -> Element {
+    live(
+        "Un site web complet",
+        "Rust, nginx, une base, un cache",
+        "Une ligne par technologie. Le compilateur relie tout : nginx renvoie vers l'application, qui reçoit DATABASE_URL et REDIS_URL ; la base garde ses données, son mot de passe reste secret.",
+        examples::WEB,
+        "/bac-a-sable/web",
+    )
+}
+
+/// Un exemple et les fichiers que le compilateur en tire, à chaque affichage : ce que
+/// montre la page est exactement ce que produit le compilateur.
+fn live(
+    eyebrow: &'static str,
+    title: &'static str,
+    lead: &'static str,
+    source: &'static str,
+    edit: &'static str,
+) -> Element {
+    let files = drc::compile_str(source).unwrap_or_default();
     section().child(
         div()
             .class("wrap")
-            .child(span().class("eyebrow").text("En direct"))
-            .child(h2().class("section-title").text("Ce que produit le compilateur"))
-            .child(p().class("lead").text(
-                "Une ligne à gauche ; à droite, les fichiers générés à l'instant par le compilateur du site.",
-            ))
+            .child(span().class("eyebrow").text(eyebrow))
+            .child(h2().class("section-title").text(title))
+            .child(p().class("lead").text(lead))
             .child(
                 div()
                     .class("demo")
                     .child(
                         div()
                             .class("reveal")
-                            .child(div().class("file-tag").html("<span class=\"dot\"></span>app.drc"))
-                            .child(code_block("app.drc", examples::HOME)),
+                            .child(
+                                div()
+                                    .class("file-tag")
+                                    .html("<span class=\"dot\"></span>app.drc"),
+                            )
+                            .child(code_block("app.drc", source)),
                     )
                     .child(div().class("reveal").child(outputs(&files))),
             )
             .child(
-                div()
-                    .class("actions")
-                    .child(a().class("btn primary").href("/bac-a-sable").text("Modifier cet exemple")),
+                div().class("actions").child(
+                    a().class("btn primary")
+                        .href(edit)
+                        .text("Modifier cet exemple"),
+                ),
             ),
     )
 }

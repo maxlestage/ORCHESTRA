@@ -452,3 +452,86 @@ fn several_containers_in_one_app() {
     );
     assert!(error("api { image = \"a:1\", with = [\"b:1\"] }").contains("`with` s'écrit"));
 }
+
+#[test]
+fn a_web_stack_in_one_block() {
+    let files = drc::compile_str(include_str!("../examples/web.drc")).unwrap();
+    let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Dockerfile",
+            "docker-compose.yml",
+            "deployment.yaml",
+            "service.yaml",
+            "configmap.yaml",
+            "statefulset.yaml",
+            "secret.yaml"
+        ]
+    );
+    assert!(file(&files, "Dockerfile").contains("RUN cargo install --path . --root /out\n"));
+    let compose = file(&files, "docker-compose.yml");
+    // L'application reçoit l'adresse de la base et du cache ; nginx seul est publié.
+    assert!(compose.contains("      DATABASE_URL: postgres://postgres:change-me@web-postgres:5432/web\n      REDIS_URL: redis://web-redis:6379\n"));
+    assert!(
+        compose.contains("  web-nginx:\n    image: nginx:1.29\n    ports:\n      - \"80:80\"\n")
+    );
+    assert!(!compose.contains("8080:8080"));
+    assert!(compose.contains("      - web-postgres:/var/lib/postgresql/data\n"));
+    // `$` doublé pour Compose, simple pour Kubernetes.
+    assert!(compose.contains("proxy_pass http://web:8080;\n") && compose.contains("Host $$host;"));
+    assert!(file(&files, "configmap.yaml").contains("Host $host;"));
+    let statefulset = file(&files, "statefulset.yaml");
+    assert!(statefulset.contains("  serviceName: web-postgres\n"));
+    assert!(statefulset.contains("            storage: \"1Gi\"\n"));
+    assert!(statefulset.contains("              value: /var/lib/postgresql/data\n"));
+    let secret = file(&files, "secret.yaml");
+    assert!(secret.contains("  POSTGRES_PASSWORD: change-me\n"));
+    let deployment = file(&files, "deployment.yaml");
+    assert!(
+        !deployment.contains("DATABASE_URL"),
+        "le mot de passe reste dans le Secret"
+    );
+    assert!(
+        deployment
+            .contains("          envFrom:\n            - secretRef:\n                name: web\n")
+    );
+}
+
+#[test]
+fn stack_options_and_mistakes() {
+    let files = drc::compile_str(
+        "shop { image = \"acme/shop\", version = \"3\", port = 3000, mariadb = \"12\", password = \"p@ss\", host = \"shop.fr\" }",
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    // Sans nginx, l'application est publiée elle-même.
+    assert!(
+        compose.contains("  shop:\n    image: acme/shop:3\n    ports:\n      - \"3000:3000\"\n")
+    );
+    assert!(compose.contains("mysql://root:p%40ss@shop-mariadb:3306/shop"));
+    assert!(compose.contains("      MARIADB_ROOT_PASSWORD: p@ss\n"));
+    assert!(file(&files, "ingress.yaml").contains(
+        "                name: shop\n                port:\n                  number: 3000\n"
+    ));
+
+    assert!(error("web { postgres = \"18\" }").contains("une pile a besoin de son application"));
+    assert!(
+        error("web { rust = \".\", postgres = \"18\", mysql = \"9\" }")
+            .contains("`postgres` et `mysql` donneraient tous deux `DATABASE_URL`")
+    );
+    assert!(
+        error("web { rust = \".\", redis = \"8\", with = {} }")
+            .contains("sert aux applications simples")
+    );
+    assert!(
+        error("web { rust = \".\", postgress = \"18\" }").contains("vouliez-vous dire `postgres`")
+    );
+    assert!(
+        error("web { rust = \".\", nginx = \"nginx:1.29\" }").contains("`nginx` est une version")
+    );
+    assert!(
+        error("web { rust = \".\", nginx = \"1.29\" }\nfront { image = \"nginx:1.29\" }")
+            .contains("déjà publié par `web`")
+    );
+}

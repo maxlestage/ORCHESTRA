@@ -23,6 +23,20 @@ propose la correction :
 app.drc:2:5 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)
 ```
 
+Un site web complet, une ligne par technologie :
+
+```text
+web {
+    rust     = "."
+    nginx    = "1.29"
+    postgres = "18"
+    redis    = "8"
+}
+```
+
+nginx renvoie vers l'application, qui reçoit `DATABASE_URL` et `REDIS_URL` ; la base garde ses
+données (volume, StatefulSet Kubernetes) et son mot de passe (`password`, Secret Kubernetes).
+
 Les sections `docker`, `compose` et `k8s` de la spécification complète restent disponibles
 pour tout le reste (voir `examples/complet.drc`).
 
@@ -90,7 +104,7 @@ cargo wasm && cargo run -- export dist
 | `src/wasm.rs` | `orchestra.wasm` : le compilateur dans le navigateur |
 | `src/site/` | Le site Paquets : pages, illustrations SVG, feuille de style, export statique |
 | `src/main.rs` | Le binaire `orchestra` : le site, `orchestra build` et `orchestra check` |
-| `examples/` | `simple.drc` (une ligne), `boutique.drc` (trois applications), `ports.drc` (ports au choix), `versions.drc` (versions et `with`), `complet.drc` (les trois sections) et `projet/` (`import`) |
+| `examples/` | `simple.drc` (une ligne), `boutique.drc` (trois applications), `ports.drc` (ports au choix), `versions.drc` (versions et `with`), `web.drc` (une pile web), `complet.drc` (les trois sections) et `projet/` (`import`) |
 | `ci/mobile.mjs` | Le contrôle « aucun défilement horizontal » |
 
 ## Intégration continue

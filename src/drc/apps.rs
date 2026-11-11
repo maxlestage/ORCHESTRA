@@ -15,6 +15,8 @@
 //! Les sections `docker`, `compose` et `k8s` écrites à la main restent possibles : elles
 //! complètent ce que les applications génèrent, ou le remplacent clé par clé.
 
+mod stack;
+
 use super::eval::{AppValue, SectionValue, merge};
 use super::parser::Section;
 use super::{Error, Pos, Value};
@@ -50,7 +52,45 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
     // Compose publie chaque port sur la machine : deux applications ne peuvent pas
     // prendre le même.
     let mut published: Vec<(i64, String)> = Vec::new();
+    let mut volumes: Vec<(String, Value)> = Vec::new();
+    let mut configs: Vec<(String, Value)> = Vec::new();
     for app in apps {
+        // Une pile (`web { rust = ".", nginx = "1.29", postgres = "18" }`).
+        if stack::is_stack(app) {
+            let out = stack::expand(app)?;
+            for (public, inside) in out.published {
+                if let Some((_, owner)) = published.iter().find(|(p, _)| *p == public) {
+                    return Err(Error::at(
+                        app.pos,
+                        format!(
+                            "`{}` publie le port {public}, déjà publié par `{owner}` (port {inside} à l'intérieur)",
+                            app.name
+                        ),
+                    ));
+                }
+                published.push((public, app.name.clone()));
+            }
+            if let Some(dockerfile) = out.dockerfile {
+                if docker.is_some() {
+                    return Err(Error::at(
+                        app.pos,
+                        "une seule application peut être construite en Rust (un seul Dockerfile)",
+                    ));
+                }
+                docker = Some((dockerfile, app.pos));
+            }
+            services.extend(out.services);
+            for (kind, value) in out.k8s {
+                if let Value::List(items) = value {
+                    for item in items {
+                        push(&mut k8s, &kind, item);
+                    }
+                }
+            }
+            volumes.extend(out.volumes);
+            configs.extend(out.configs);
+            continue;
+        }
         let a = App::read(app, apps)?;
         for (public, inside) in a.all_ports() {
             if let Some((_, owner)) = published.iter().find(|(p, _)| *p == public) {
@@ -69,7 +109,7 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
             if docker.is_some() {
                 return Err(Error::at(
                     app.pos,
-                    "une seule application peut avoir `build = \"rust\"` (un seul Dockerfile)",
+                    "une seule application peut être construite en Rust (un seul Dockerfile)",
                 ));
             }
             docker = Some((dockerfile, app.pos));
@@ -94,9 +134,16 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
         });
     }
     if !services.is_empty() {
+        let mut compose = vec![("services".to_owned(), Value::Object(services))];
+        if !volumes.is_empty() {
+            compose.push(("volumes".to_owned(), Value::Object(volumes)));
+        }
+        if !configs.is_empty() {
+            compose.push(("configs".to_owned(), Value::Object(configs)));
+        }
         sections.push(SectionValue {
             section: Section::Compose,
-            value: obj([("services", Value::Object(services))]),
+            value: Value::Object(compose),
             pos: first,
         });
         sections.push(SectionValue {
