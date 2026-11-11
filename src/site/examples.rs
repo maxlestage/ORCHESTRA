@@ -27,6 +27,11 @@ pub const ALL: &[Example] = &[
         source: include_str!("../../examples/ports.drc"),
     },
     Example {
+        id: "versions",
+        title: "Versions",
+        source: include_str!("../../examples/versions.drc"),
+    },
+    Example {
         id: "complet",
         title: "Complet",
         source: include_str!("../../examples/complet.drc"),

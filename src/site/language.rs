@@ -117,7 +117,8 @@ fn objective() -> Vec<Node> {
 
 fn apps() -> Vec<Node> {
     let keys: Vec<Vec<String>> = [
-        ("image", "texte", "L'image du conteneur. Obligatoire, sauf avec <code>build</code>."),
+        ("image", "texte", "L'image du conteneur, avec ou sans version : <code>\"postgres:18-alpine\"</code> ou <code>\"postgres\"</code>. Obligatoire, sauf avec <code>build</code>."),
+        ("version", "texte", "La version de l'image, écrite à part : <code>image = \"postgres\"</code>, <code>version = \"18-alpine\"</code>. Avec <code>build</code>, la version de l'image construite (<code>latest</code> sinon)."),
         ("port", "nombre ou texte", "<code>3000</code> : le même dehors et dedans. <code>\"8080:80\"</code> : publié sur 8080, l'application écoute sur 80. Déduit pour les images courantes (nginx 80, postgres 5432, redis 6379…), où un nombre seul est le port public : <code>port = 8080</code> publie nginx sur 8080. <code>false</code> pour aucun."),
         ("ports", "liste", "Plusieurs ports : <code>[80, \"8443:443\"]</code>. Deux applications ne peuvent pas publier le même port : le compilateur le refuse et en propose un libre."),
         ("build", "texte", "<code>\"rust\"</code> : un Dockerfile Rust en deux étapes (binaire du même nom que l'app). Un autre texte : le dossier de construction Compose."),
@@ -127,6 +128,7 @@ fn apps() -> Vec<Node> {
         ("volumes", "liste", "Des volumes Compose : <code>[\"./data:/data\"]</code>."),
         ("depends_on", "liste", "Les applications à démarrer avant (Compose)."),
         ("host", "texte", "Un nom de domaine : un Ingress Kubernetes vers le port."),
+        ("with", "objet", "D'autres conteneurs dans le même pod : <code>{ proxy = { image = \"envoyproxy/envoy\", version = \"v1.36\", port = 9901 } }</code>, avec <code>image</code>, <code>version</code>, <code>port</code>, <code>ports</code>, <code>env</code> et <code>command</code>. Dans Compose, chacun devient un service qui partage le réseau de l'application."),
     ]
     .iter()
     .map(|(key, kind, role)| vec![format!("<code>{key}</code>"), (*kind).to_owned(), (*role).to_owned()])
@@ -497,6 +499,8 @@ fn cli() -> Vec<Node> {
         )
         .into(),
         para("Les fichiers générés respectent les conventions Docker et Kubernetes et s'utilisent directement avec <code>docker build</code>, <code>docker compose up</code> ou <code>kubectl apply -f</code>."),
+        para("<code>--set NOM=valeur</code> remplace une variable du fichier au moment de compiler, sans le modifier : pratique en intégration continue pour déployer la version qui vient d'être construite. La valeur garde le type de la variable (<code>--set REPLICAS=5</code> reste un nombre, <code>--set API=1.10</code> reste un texte), et un nom inconnu est une erreur."),
+        shell_block("$ orchestra build app.drc --out deploy --set API=2.2.0 --set REPLICAS=5").into(),
     ]
 }
 

@@ -35,6 +35,7 @@ jobs:
       - name: Exemples (orchestra check et build)
         run: |
           cargo run --quiet --locked -- check examples/complet.drc
+          cargo run --quiet --locked -- check examples/versions.drc --set API=9.9.9
           cargo run --quiet --locked -- build examples/projet/main.drc --out deploy
           ls deploy
 
