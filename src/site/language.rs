@@ -466,7 +466,7 @@ fn cli() -> Vec<Node> {
 fn api() -> Vec<Node> {
     vec![
         h2_id("api", "11. API HTTP"),
-        para("Le site expose le compilateur : envoyez un fichier, recevez les fichiers générés (ou l'erreur, avec un statut 422)."),
+        para("Le serveur expose le compilateur : envoyez un fichier, recevez les fichiers générés (ou l'erreur, avec un statut 422). Sur la version GitHub Pages, sans serveur, le bac à sable compile dans le navigateur avec le même compilateur, en WebAssembly."),
         shell_block(
             "$ curl -s https://<votre-site>/api/compile \\\n    -H 'content-type: application/json' \\\n    -d '{\"source\": \"docker { base = \\\"alpine:3.22\\\" }\"}'\n{\"files\":[{\"name\":\"Dockerfile\",\"content\":\"…\"}]}",
         )

@@ -1,14 +1,16 @@
-//! Le site : des pages rendues par le serveur avec Paquets, sans JavaScript.
-//! Les animations sont en CSS et en SVG ; le bac à sable compile côté serveur.
+//! Le site : des pages rendues par le serveur avec Paquets. Les animations sont en CSS
+//! et en SVG ; le bac à sable compile côté serveur, ou dans le navigateur avec
+//! `orchestra.wasm` (seule façon de compiler sur GitHub Pages, voir [`export`]).
 
 mod art;
 mod examples;
-mod highlight;
+pub mod export;
 mod home;
 mod language;
 mod sandbox;
 
 use orchestra::drc::GeneratedFile;
+use orchestra::render::{self, highlight};
 use paquets::prelude::*;
 
 /// La feuille de style, écrite dans chaque page (et autorisée par sa CSP).
@@ -20,6 +22,7 @@ pub fn app() -> App {
     app.get("/", home::page);
     app.get("/langage", language::page);
     app.get("/bac-a-sable", sandbox::page);
+    app.get("/bac-a-sable/:exemple", sandbox::example);
     app.post("/bac-a-sable", sandbox::submit);
     app.post("/api/compile", sandbox::api);
     app.health("/health");
@@ -95,9 +98,7 @@ fn footer() -> Element {
 
 /// Un bloc de code coloré.
 fn code_block(name: &str, source: &str) -> Element {
-    pre()
-        .class("code")
-        .child(code().html(highlight::for_file(name, source)))
+    div().class("block").html(render::code_block(name, source))
 }
 
 /// Un bloc de commandes de terminal.
@@ -107,42 +108,17 @@ fn shell_block(source: &str) -> Element {
         .child(code().html(highlight::shell(source)))
 }
 
-/// La pastille de couleur d'un fichier généré.
-fn dot_class(name: &str) -> &'static str {
-    if name == "Dockerfile" {
-        "dot docker"
-    } else if name.starts_with("docker-compose") {
-        "dot compose"
-    } else if name.ends_with(".drc") {
-        "dot"
-    } else {
-        "dot k8s"
-    }
-}
-
 /// Les fichiers générés, dépliables ; le premier est ouvert.
 fn outputs(files: &[GeneratedFile]) -> Element {
-    div()
-        .class("outputs")
-        .children(files.iter().enumerate().map(|(i, file)| {
-            let lines = file.content.lines().count();
-            let summary = summary()
-                .child(span().class(dot_class(&file.name)))
-                .child(span().text(file.name.clone()))
-                .child(span().class("lines").text(format!("{lines} lignes")));
-            let details = details()
-                .class("file")
-                .child(summary)
-                .child(code_block(&file.name, &file.content));
-            if i == 0 {
-                details.attr("open", "")
-            } else {
-                details
-            }
-        }))
+    div().html(render::outputs(files))
 }
 
 async fn not_found(_req: Request) -> Page {
+    missing()
+}
+
+/// La page 404.
+fn missing() -> Page {
     layout(
         "Fausse note",
         "Cette page n'existe pas.",
@@ -193,6 +169,7 @@ mod tests {
             assert_eq!(client.get(path).await.status(), 200, "{path}");
         }
         assert_eq!(client.get("/introuvable").await.status(), 404);
+        assert_eq!(client.get("/bac-a-sable/inconnu").await.status(), 404);
 
         // L'exemple de l'accueil est compilé à chaque rendu.
         let home = client.get("/").await.text();
@@ -202,7 +179,7 @@ mod tests {
         // Le formulaire du bac à sable.
         let res = client
             .post("/bac-a-sable")
-            .form(&json!({ "source": examples::find(Some("complet")).source }))
+            .form(&json!({ "source": examples::ALL[0].source }))
             .await;
         assert_eq!(res.status(), 200);
         assert!(res.text().contains("5 fichier(s) générés"));

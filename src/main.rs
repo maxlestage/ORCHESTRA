@@ -3,6 +3,7 @@
 //!     cargo run                                   # le site, http://localhost:3000
 //!     cargo run -- build app.drc --out generated  # écrit Dockerfile, compose, manifests
 //!     cargo run -- check app.drc                  # vérifie sans rien écrire
+//!     cargo run -- export dist --base /ORCHESTRA  # le site en fichiers statiques (GitHub Pages)
 
 mod site;
 
@@ -23,6 +24,7 @@ fn main() -> ExitCode {
         },
         Some("build") => cli(&args[1..], true),
         Some("check") => cli(&args[1..], false),
+        Some("export") => export(&args[1..]),
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");
             ExitCode::SUCCESS
@@ -45,7 +47,9 @@ Usage :
   orchestra                         lance le site (PORT, 3000 par défaut)
   orchestra build <fichier.drc> [--out <dossier>]
                                     écrit Dockerfile, docker-compose.yml et les manifests
-  orchestra check <fichier.drc>     vérifie le fichier sans rien écrire";
+  orchestra check <fichier.drc>     vérifie le fichier sans rien écrire
+  orchestra export <dossier> [--base /ORCHESTRA] [--wasm orchestra.wasm]
+                                    le site en fichiers statiques (GitHub Pages)";
 
 fn cli(args: &[String], write: bool) -> ExitCode {
     let mut input = None;
@@ -95,6 +99,60 @@ fn cli(args: &[String], write: bool) -> ExitCode {
         println!("✓ {}", path.display());
     }
     ExitCode::SUCCESS
+}
+
+/// `orchestra export <dossier>` ; la base vient aussi de `BASE_PATH`.
+fn export(args: &[String]) -> ExitCode {
+    let mut out = None;
+    let mut base = std::env::var("BASE_PATH").unwrap_or_default();
+    let mut wasm = PathBuf::from(site::export::WASM);
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--base" => match args.next() {
+                Some(value) => base = value.clone(),
+                None => return usage_error("`--base` attend un chemin (ex. /ORCHESTRA)"),
+            },
+            "--wasm" => match args.next() {
+                Some(value) => wasm = PathBuf::from(value),
+                None => return usage_error("`--wasm` attend un fichier"),
+            },
+            flag if flag.starts_with('-') => {
+                return usage_error(&format!("option inconnue `{flag}`"));
+            }
+            dir if out.is_none() => out = Some(PathBuf::from(dir)),
+            extra => return usage_error(&format!("argument en trop `{extra}`")),
+        }
+    }
+    let Some(out) = out else {
+        return usage_error("indiquez le dossier de sortie");
+    };
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match runtime.block_on(site::export::export(&out, &base, &wasm)) {
+        Ok(report) => {
+            println!("✓ {} fichier(s) dans {}", report.files, out.display());
+            if !report.wasm {
+                eprintln!(
+                    "attention : {} absent, le bac à sable ne compilera pas en ligne\n  cargo build --lib --target wasm32-unknown-unknown --profile wasm",
+                    wasm.display()
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("erreur : {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn usage_error(message: &str) -> ExitCode {

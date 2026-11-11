@@ -3,7 +3,8 @@
 #
 # - rust : format, clippy, tests (le compilateur Rust-Compose et le site) ;
 # - mobile : le site tourne, et aucune page ne défile horizontalement de 320 à 1440 px ;
-# - merge : la fusion dans master.
+# - merge : la fusion dans master, puis le déploiement sur GitHub Pages (pages.yml) :
+#   un push fait par un workflow ne lance aucun autre workflow, il est donc lancé ici.
 
 name: CI
 
@@ -30,10 +31,13 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: wasm32-unknown-unknown
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Clippy (compilateur du navigateur, wasm32)
+        run: cargo clippy --locked --lib --target wasm32-unknown-unknown -- -D warnings
       - run: cargo test --locked
       - name: Exemples (orchestra check et build)
         run: |
@@ -68,6 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     concurrency:
       group: merge-into-master
       cancel-in-progress: false
@@ -90,3 +95,7 @@ jobs:
           fi
           git merge --no-ff --no-edit "$SHA" -m "Merge branch '$BRANCH' into master (auto-merge)"
           git push origin HEAD:master
+      - name: Déploiement sur GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"
