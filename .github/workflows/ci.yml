@@ -20,6 +20,7 @@ jobs:
   rust:
     name: Rust (fmt, clippy, tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -42,6 +43,7 @@ jobs:
   mobile:
     name: Mobile d'abord (aucun défilement horizontal)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -59,6 +61,7 @@ jobs:
 
   merge:
     name: Fusion dans master
+    timeout-minutes: 5
     needs: [rust, mobile]
     if: >-
       github.event_name == 'push' && github.ref_name != 'master' &&
