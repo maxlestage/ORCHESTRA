@@ -52,12 +52,16 @@ jobs:
         with:
           node-version: lts/*
       - run: cargo build --locked
-      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      # Le Chrome déjà installé sur les machines GitHub : rien à télécharger.
+      - run: npm install --no-save playwright
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Pages de 320 à 1440 px
+        timeout-minutes: 5
         run: |
           PORT=3000 ./target/debug/orchestra &
           for i in $(seq 1 30); do curl -sf localhost:3000/health && break; sleep 1; done
-          node ci/mobile.mjs http://localhost:3000
+          PW_CHANNEL=chrome node ci/mobile.mjs http://localhost:3000
 
   merge:
     name: Fusion dans master
