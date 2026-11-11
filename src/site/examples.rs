@@ -10,11 +10,19 @@ pub struct Example {
 /// L'exemple de la page d'accueil : une ligne, trois fichiers.
 pub const HOME: &str = include_str!("../../examples/simple.drc");
 
+/// La pile web de la page d'accueil : Rust, nginx, Postgres et Redis.
+pub const WEB: &str = include_str!("../../examples/web.drc");
+
 pub const ALL: &[Example] = &[
     Example {
         id: "simple",
         title: "Le plus simple",
         source: include_str!("../../examples/simple.drc"),
+    },
+    Example {
+        id: "web",
+        title: "Site web",
+        source: include_str!("../../examples/web.drc"),
     },
     Example {
         id: "boutique",

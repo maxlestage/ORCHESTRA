@@ -9,6 +9,7 @@ use super::{code_block, layout, shell_block};
 const TOC: &[(&str, &str)] = &[
     ("objectif", "Objectif et principes"),
     ("app", "L'essentiel : app"),
+    ("pile", "Un site web : une pile"),
     ("structure", "Structure du projet"),
     ("syntaxe", "Syntaxe générale"),
     ("docker", "Section docker"),
@@ -41,6 +42,7 @@ pub async fn page(_req: Request) -> Page {
         ))
         .children(objective())
         .children(apps())
+        .children(stack())
         .children(structure())
         .children(syntax())
         .children(docker())
@@ -145,6 +147,43 @@ fn apps() -> Vec<Node> {
             "Besoin d'un réglage que <code>app</code> ne prévoit pas ? Ajoutez une section <code>docker</code>, <code>compose</code> ou <code>k8s</code> à côté : elle complète ce que les applications génèrent.",
         ))
         .into(),
+    ]
+}
+
+fn stack() -> Vec<Node> {
+    let techs: Vec<Vec<String>> = [
+        ("rust", "<code>\".\"</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. À la place : <code>image = \"…\"</code> pour une application déjà construite."),
+        ("nginx", "<code>\"1.29\"</code>", "Devant l'application, sur le port 80 : sa configuration de proxy est écrite pour vous (ConfigMap dans Kubernetes)."),
+        ("postgres", "<code>\"18\"</code>", "<code>DATABASE_URL</code> pour l'application ; données dans un volume (StatefulSet et volume persistant dans Kubernetes)."),
+        ("mysql, mariadb", "<code>\"9.5\"</code>, <code>\"12\"</code>", "<code>DATABASE_URL</code> (<code>mysql://…</code>), données gardées de même."),
+        ("mongo", "<code>\"8\"</code>", "<code>MONGODB_URL</code>, données gardées de même."),
+        ("redis, valkey", "<code>\"8\"</code>, <code>\"9\"</code>", "<code>REDIS_URL</code> pour l'application."),
+    ]
+    .iter()
+    .map(|(tech, example, role)| vec![format!("<code>{tech}</code>"), (*example).to_owned(), (*role).to_owned()])
+    .collect();
+    let options: Vec<Vec<String>> = [
+        ("port", "Le port de l'application (8080 par défaut, donné aussi dans <code>PORT</code>)."),
+        ("version", "La version de l'image de l'application."),
+        ("env", "D'autres variables pour l'application."),
+        ("replicas", "Le nombre d'instances de l'application."),
+        ("password", "Le mot de passe des bases (<code>change-me</code> par défaut : changez-le, par exemple avec <code>--set</code>). Il va dans un Secret Kubernetes."),
+        ("host", "Un nom de domaine : un Ingress vers nginx, ou vers l'application sans nginx."),
+    ]
+    .iter()
+    .map(|(key, role)| vec![format!("<code>{key}</code>"), (*role).to_owned()])
+    .collect();
+    vec![
+        h2_id("pile", "Un site web : une pile"),
+        para(
+            "Pour un site, écrivez une ligne par technologie, avec sa version. Le compilateur relie tout :",
+        ),
+        drc(include_str!("../../examples/web.drc")),
+        para(
+            "nginx renvoie vers l'application ; l'application reçoit <code>DATABASE_URL</code> et <code>REDIS_URL</code> ; seul nginx est publié (port 80), la base et le cache restent internes. Dans Kubernetes, la base devient un StatefulSet avec son volume, et son mot de passe un Secret.",
+        ),
+        table(&["Technologie", "Valeur", "Ce qu'elle apporte"], &techs),
+        table(&["Option", "Rôle"], &options),
     ]
 }
 
