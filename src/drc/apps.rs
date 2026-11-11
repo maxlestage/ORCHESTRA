@@ -2,6 +2,11 @@
 //! Compose, Deployment, Service et Ingress Kubernetes, et Dockerfile pour `build = "rust"`.
 //! Le port des images courantes (nginx, postgres, redis…) est déduit.
 //!
+//! Les ports : `port = 3000` (le même dehors et dedans), `port = "8080:80"` (publié sur
+//! 8080, l'application écoute sur 80), `ports = [80, "8443:443"]` pour plusieurs. Pour une
+//! image connue, un nombre seul est le port public : `nginx { image = "nginx:1.29",
+//! port = 8080 }` publie sur 8080 le port 80 de nginx.
+//!
 //! Les sections `docker`, `compose` et `k8s` écrites à la main restent possibles : elles
 //! complètent ce que les applications génèrent, ou le remplacent clé par clé.
 
@@ -14,6 +19,7 @@ pub const KEYS: &[&str] = &[
     "image",
     "build",
     "port",
+    "ports",
     "replicas",
     "env",
     "command",
@@ -31,8 +37,29 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
     let mut docker: Option<(Value, Pos)> = None;
     let mut services = Vec::new();
     let mut k8s: Vec<(String, Value)> = Vec::new();
+    // Compose publie chaque port sur la machine : deux applications ne peuvent pas
+    // prendre le même.
+    let mut published: Vec<(i64, &str)> = Vec::new();
     for app in apps {
         let a = App::read(app, apps)?;
+        for (public, inside) in &a.ports {
+            if let Some((_, owner)) = published.iter().find(|(p, _)| p == public) {
+                let pos = app
+                    .keys
+                    .iter()
+                    .find(|(k, _)| k == "port" || k == "ports")
+                    .map_or(app.pos, |(_, pos)| *pos);
+                return Err(Error::at(
+                    pos,
+                    format!(
+                        "`{}` : le port {public} est déjà publié par `{owner}` ; choisissez un autre port public, par exemple `port = \"{}:{inside}\"`",
+                        a.name,
+                        free_port(*public, &published)
+                    ),
+                ));
+            }
+            published.push((*public, app.name.as_str()));
+        }
         if let Some(dockerfile) = a.dockerfile() {
             if docker.is_some() {
                 return Err(Error::at(
@@ -127,7 +154,8 @@ struct App<'a> {
     image: String,
     /// `build = "rust"` : un Dockerfile Rust ; un autre texte : le dossier de construction.
     build: Option<&'a str>,
-    port: Option<i64>,
+    /// (port publié, port de l'application), dans l'ordre écrit.
+    ports: Vec<(i64, i64)>,
     replicas: i64,
     env: Vec<(String, String)>,
     command: Vec<String>,
@@ -226,19 +254,79 @@ impl<'a> App<'a> {
                 )));
             }
         };
-        let port = match get("port") {
-            None => known_port(&image),
-            Some(Value::Bool(false)) => None,
-            Some(Value::Int(p)) if (1..=65535).contains(p) => Some(*p),
-            Some(_) => {
+        let known = known_port(&image);
+        let one = |value: &Value, single: bool| -> Result<(i64, i64), String> {
+            match value {
+                // Un nombre seul, pour une image connue : le port public de son port.
+                Value::Int(p) if valid_port(*p) => match known {
+                    Some(inside) if single => Ok((*p, inside)),
+                    _ => Ok((*p, *p)),
+                },
+                Value::Str(text) => {
+                    let parse = |t: &str| t.trim().parse::<i64>().ok().filter(|p| valid_port(*p));
+                    match text.split_once(':') {
+                        Some((public, inside)) => match (parse(public), parse(inside)) {
+                            (Some(public), Some(inside)) => Ok((public, inside)),
+                            _ => Err(format!("`{text}` n'est pas un port valide")),
+                        },
+                        None => parse(text)
+                            .map(|p| (p, p))
+                            .ok_or_else(|| format!("`{text}` n'est pas un port valide")),
+                    }
+                }
+                _ => Err(String::new()),
+            }
+        };
+        let help = "un port s'écrit `3000`, ou `\"8080:80\"` (publié sur 8080, l'application écoute sur 80), entre 1 et 65535";
+        let ports = match (get("port"), get("ports")) {
+            (Some(_), Some(_)) => {
                 return Err(at(
+                    "ports",
+                    format!("`{name}` : écrivez `port` ou `ports`, pas les deux"),
+                ));
+            }
+            (Some(Value::Bool(false)), None) => Vec::new(),
+            (Some(value), None) => vec![one(value, true).map_err(|why| {
+                at(
                     "port",
                     format!(
-                        "`{name}` : `port` est un nombre entre 1 et 65535 (ex. `port = 8080`), ou `false` pour aucun"
+                        "`{name}` : {why}{}{help}",
+                        if why.is_empty() { "" } else { " ; " }
+                    ),
+                )
+            })?],
+            (None, Some(Value::List(items))) => items
+                .iter()
+                .map(|item| {
+                    one(item, false).map_err(|why| {
+                        at(
+                            "ports",
+                            format!(
+                                "`{name}` : {why}{}{help}",
+                                if why.is_empty() { "" } else { " ; " }
+                            ),
+                        )
+                    })
+                })
+                .collect::<Result<_, _>>()?,
+            (None, Some(_)) => {
+                return Err(at(
+                    "ports",
+                    format!(
+                        "`{name}` : `ports` est une liste, par exemple `ports = [80, \"8443:443\"]`"
                     ),
                 ));
             }
+            (None, None) => known.map(|p| vec![(p, p)]).unwrap_or_default(),
         };
+        for (i, (public, _)) in ports.iter().enumerate() {
+            if ports[..i].iter().any(|(p, _)| p == public) {
+                return Err(at(
+                    "ports",
+                    format!("`{name}` : le port {public} est publié deux fois"),
+                ));
+            }
+        }
         let replicas = match get("replicas") {
             None => 1,
             Some(Value::Int(n)) if *n >= 0 => *n,
@@ -288,7 +376,7 @@ impl<'a> App<'a> {
             }
         }
         let host = text("host")?;
-        if host.is_some() && port.is_none() {
+        if host.is_some() && ports.is_empty() {
             return Err(at(
                 "host",
                 format!("`{name}` : `host` publie l'application, il lui faut un `port`"),
@@ -298,7 +386,7 @@ impl<'a> App<'a> {
             name,
             image,
             build,
-            port,
+            ports,
             replicas,
             env,
             command,
@@ -306,6 +394,17 @@ impl<'a> App<'a> {
             depends_on,
             host,
         })
+    }
+
+    /// Les ports sur lesquels l'application écoute, sans doublon.
+    fn inside(&self) -> Vec<i64> {
+        let mut inside: Vec<i64> = Vec::new();
+        for (_, port) in &self.ports {
+            if !inside.contains(port) {
+                inside.push(*port);
+            }
+        }
+        inside
     }
 
     fn labels(&self) -> Value {
@@ -331,8 +430,11 @@ impl<'a> App<'a> {
             ("from".to_owned(), s(RUST_RUN)),
             ("artifacts".to_owned(), Value::List(vec![s(binary.clone())])),
         ];
-        if let Some(port) = self.port {
-            docker.push(("expose".to_owned(), Value::List(vec![Value::Int(port)])));
+        if !self.ports.is_empty() {
+            docker.push((
+                "expose".to_owned(),
+                Value::List(self.inside().into_iter().map(Value::Int).collect()),
+            ));
         }
         docker.push((
             "run".to_owned(),
@@ -352,10 +454,15 @@ impl<'a> App<'a> {
         if !self.command.is_empty() {
             service.push(("command".to_owned(), list(&self.command)));
         }
-        if let Some(port) = self.port {
+        if !self.ports.is_empty() {
             service.push((
                 "ports".to_owned(),
-                Value::List(vec![s(format!("{port}:{port}"))]),
+                Value::List(
+                    self.ports
+                        .iter()
+                        .map(|(public, inside)| s(format!("{public}:{inside}")))
+                        .collect(),
+                ),
             ));
         }
         if !self.env.is_empty() {
@@ -386,10 +493,15 @@ impl<'a> App<'a> {
         if !self.command.is_empty() {
             container.push(("args".to_owned(), list(&self.command)));
         }
-        if let Some(port) = self.port {
+        if !self.ports.is_empty() {
             container.push((
                 "ports".to_owned(),
-                Value::List(vec![obj([("containerPort", Value::Int(port))])]),
+                Value::List(
+                    self.inside()
+                        .into_iter()
+                        .map(|port| obj([("containerPort", Value::Int(port))]))
+                        .collect(),
+                ),
             ));
         }
         if !self.env.is_empty() {
@@ -421,22 +533,34 @@ impl<'a> App<'a> {
     }
 
     fn k8s_service(&self) -> Option<Value> {
-        let port = self.port?;
+        if self.ports.is_empty() {
+            return None;
+        }
+        // Kubernetes exige un nom pour chaque port quand il y en a plusieurs.
+        let named = self.ports.len() > 1;
+        let ports = self
+            .ports
+            .iter()
+            .map(|(public, inside)| {
+                let mut port = Vec::new();
+                if named {
+                    port.push(("name".to_owned(), s(format!("p{public}"))));
+                }
+                port.push(("port".to_owned(), Value::Int(*public)));
+                port.push(("targetPort".to_owned(), Value::Int(*inside)));
+                Value::Object(port)
+            })
+            .collect();
         Some(obj([
             ("name", s(self.name)),
             ("selector", self.labels()),
-            (
-                "ports",
-                Value::List(vec![obj([
-                    ("port", Value::Int(port)),
-                    ("targetPort", Value::Int(port)),
-                ])]),
-            ),
+            ("ports", Value::List(ports)),
         ]))
     }
 
     fn ingress(&self) -> Option<Value> {
-        let (host, port) = (self.host?, self.port?);
+        // L'Ingress mène au premier port.
+        let (host, port) = (self.host?, self.ports.first()?.0);
         let backend = obj([(
             "service",
             obj([
@@ -486,6 +610,17 @@ pub const KNOWN_PORTS: &[(&str, i64)] = &[
     ("prometheus", 9090),
     ("minio", 9000),
 ];
+
+fn valid_port(port: i64) -> bool {
+    (1..=65535).contains(&port)
+}
+
+/// Le premier port libre à partir de `port + 1`, pour la suggestion d'une collision.
+fn free_port(port: i64, taken: &[(i64, &str)]) -> i64 {
+    (port + 1..=65535)
+        .find(|p| !taken.iter().any(|(t, _)| t == p))
+        .unwrap_or(port)
+}
 
 /// `docker.io/library/postgres:18-alpine` → 5432.
 fn known_port(image: &str) -> Option<i64> {
