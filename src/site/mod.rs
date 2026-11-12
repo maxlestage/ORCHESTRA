@@ -32,6 +32,7 @@ pub fn app() -> App {
 
 /// Les pages du menu : (chemin, titre).
 const NAV: &[(&str, &str)] = &[
+    ("/#aide-memoire", "Aide‑mémoire"),
     ("/langage", "Langage"),
     ("/bac-a-sable", "Bac à sable"),
     ("/langage#cli", "CLI"),

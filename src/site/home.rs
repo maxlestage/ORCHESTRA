@@ -12,11 +12,12 @@ pub async fn page(_req: Request) -> Page {
         "/",
         fragment([
             Node::from(hero()),
-            Node::from(how()),
-            Node::from(principles()),
+            // L'aide-mémoire tout de suite : ce que l'on vient chercher.
+            Node::from(cheats()),
             Node::from(demo()),
             Node::from(web()),
-            Node::from(cheats()),
+            Node::from(how()),
+            Node::from(principles()),
             Node::from(cli()),
         ]),
     )
