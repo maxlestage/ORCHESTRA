@@ -175,7 +175,7 @@ mod tests {
         // L'exemple de l'accueil est compilé à chaque rendu.
         let home = client.get("/").await.text();
         assert!(home.contains("docker-compose.yml"));
-        assert!(home.contains("nginx:1.29"));
+        assert!(home.contains("nginx:1.30"));
         assert!(home.contains("deployment.yaml"));
 
         // Le formulaire du bac à sable.
@@ -197,7 +197,7 @@ mod tests {
         let res = client
             .post("/api/compile")
             .json(
-                &json!({ "source": "compose { services = { web = { image = \"nginx:1.29\" } } }" }),
+                &json!({ "source": "compose { services = { web = { image = \"nginx:1.30\" } } }" }),
             )
             .await;
         assert_eq!(res.status(), 200);

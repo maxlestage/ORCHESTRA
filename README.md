@@ -5,7 +5,7 @@ manifests Kubernetes, et le site qui le présente, écrit en Rust avec
 [Paquets](https://github.com/maxlestage/Paquets).
 
 ```text
-web { image = "nginx:1.29" }
+web { image = "nginx:1.30" }
 ```
 
 Une ligne : le port (80 pour nginx), le service Compose, le Deployment et le Service
@@ -23,23 +23,21 @@ propose la correction :
 app.drc:2:5 : `web` : clé inconnue `imgae` (vouliez-vous dire `image` ?)
 ```
 
-Un site web complet, une ligne par technologie :
+Un site web complet, en nommant simplement les technologies :
 
 ```text
-web {
-    rust     = "."
-    nginx    = "1.29"
-    postgres = "18"
-    redis    = "8"
-}
+web { rust nginx postgres redis }
 ```
 
-nginx renvoie vers l'application, qui reçoit `DATABASE_URL` et `REDIS_URL` ; la base garde ses
-données (volume, StatefulSet Kubernetes) et son mot de passe (`password`, Secret Kubernetes).
+Un nom seul prend la dernière version stable (nginx 1.30, postgres 18, redis 8…). nginx renvoie
+vers l'application, qui reçoit `DATABASE_URL` et `REDIS_URL` ; la base garde ses données (volume,
+StatefulSet Kubernetes) et son mot de passe (`password`, Secret Kubernetes). Sans application,
+`data { postgres redis }` donne juste une base et un cache.
 
-La variante s'écrit dans la valeur : `postgres = "18-alpine"`, `nginx = "1.29-alpine"`. Pour le
-code Rust, `rust = "1.99-slim-bookworm"` ou `rust = "1.99-alpine"` : l'image d'exécution de la
-même famille (`debian:bookworm-slim`, `alpine:3.24`) est choisie pour vous.
+Une version ou une variante s'écrit sans guillemets : `postgres = 18-alpine`,
+`nginx = 1.30-alpine`. Pour le code Rust, `rust = 1.99-slim-bookworm` ou `rust = 1.99-alpine` :
+l'image d'exécution de la même famille (`debian:bookworm-slim`, `alpine:3.24`) est choisie pour
+vous.
 
 Les sections `docker`, `compose` et `k8s` de la spécification complète restent disponibles
 pour tout le reste (voir `examples/complet.drc`).

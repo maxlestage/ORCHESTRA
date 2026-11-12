@@ -140,7 +140,7 @@ fn apps() -> Vec<Node> {
     vec![
         h2_id("app", "L'essentiel : app"),
         para("Une application s'écrit en une ligne : un nom, une image. Le compilateur en déduit le port, le service Compose, le Deployment et le Service Kubernetes, avec leurs labels et leur selector :"),
-        drc("web { image = \"nginx:1.29\" }"),
+        drc("web { image = \"nginx:1.30\" }"),
         para("Aucun mot-clé n'est nécessaire : un nom suivi de <code>{ … }</code> est une application, un nom suivi de <code>=</code> une variable. Les formes longues <code>app web { … }</code> et <code>var X = …</code> restent valides."),
         para("Plusieurs applications, un Dockerfile Rust, un nom de domaine :"),
         drc(include_str!("../../examples/boutique.drc")),
@@ -154,12 +154,12 @@ fn apps() -> Vec<Node> {
 
 fn stack() -> Vec<Node> {
     let techs: Vec<Vec<String>> = [
-        ("rust", "<code>\".\"</code> ou <code>\"1.99-alpine\"</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. <code>\".\"</code> est le dossier du code ; une variante (<code>\"1.99-slim-bookworm\"</code>, <code>\"1.99-alpine\"</code>…) choisit l'image Rust, et l'image d'exécution de la même famille est prise pour vous (<code>src</code> donne alors le dossier). À la place : <code>image = \"…\"</code> pour une application déjà construite."),
-        ("nginx", "<code>\"1.29\"</code>", "Devant l'application, sur le port 80 : sa configuration de proxy est écrite pour vous (ConfigMap dans Kubernetes)."),
-        ("postgres", "<code>\"18\"</code>", "<code>DATABASE_URL</code> pour l'application ; données dans un volume (StatefulSet et volume persistant dans Kubernetes)."),
-        ("mysql, mariadb", "<code>\"9.5\"</code>, <code>\"12\"</code>", "<code>DATABASE_URL</code> (<code>mysql://…</code>), données gardées de même."),
-        ("mongo", "<code>\"8\"</code>", "<code>MONGODB_URL</code>, données gardées de même."),
-        ("redis, valkey", "<code>\"8\"</code>, <code>\"9\"</code>", "<code>REDIS_URL</code> pour l'application."),
+        ("rust", "rien, <code>\"./api\"</code> ou <code>1.99-alpine</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. <code>\".\"</code> est le dossier du code ; une variante (<code>\"1.99-slim-bookworm\"</code>, <code>\"1.99-alpine\"</code>…) choisit l'image Rust, et l'image d'exécution de la même famille est prise pour vous (<code>src</code> donne alors le dossier). À la place : <code>image = \"…\"</code> pour une application déjà construite."),
+        ("nginx", "rien (1.30) ou <code>1.30-alpine</code>", "Devant l'application, sur le port 80 : sa configuration de proxy est écrite pour vous (ConfigMap dans Kubernetes)."),
+        ("postgres", "rien (18) ou <code>18-alpine</code>", "<code>DATABASE_URL</code> pour l'application ; données dans un volume (StatefulSet et volume persistant dans Kubernetes)."),
+        ("mysql, mariadb", "rien (26, 13)", "<code>DATABASE_URL</code> (<code>mysql://…</code>), données gardées de même."),
+        ("mongo", "rien (9)", "<code>MONGODB_URL</code>, données gardées de même."),
+        ("redis, valkey", "rien (8, 9)", "<code>REDIS_URL</code> pour l'application."),
     ]
     .iter()
     .map(|(tech, example, role)| vec![format!("<code>{tech}</code>"), (*example).to_owned(), (*role).to_owned()])
@@ -178,16 +178,23 @@ fn stack() -> Vec<Node> {
     vec![
         h2_id("pile", "Un site web : une pile"),
         para(
-            "Pour un site, écrivez une ligne par technologie, avec sa version. Le compilateur relie tout :",
+            "Pour un site, nommez les technologies dont vous avez besoin. Un nom seul prend la dernière version stable ; le compilateur relie tout :",
         ),
         drc(include_str!("../../examples/web.drc")),
         para(
+            "Une version au choix s'écrit après <code>=</code>, sans guillemets, variante comprise :",
+        ),
+        drc(include_str!("../../examples/web-versions.drc")),
+        para(
+            "L'application (<code>rust</code> ou <code>image</code>) est facultative : <code>data { postgres redis }</code> donne seulement une base et un cache, <code>site { nginx }</code> un nginx seul.",
+        ),
+        para(
             "nginx renvoie vers l'application ; l'application reçoit <code>DATABASE_URL</code> et <code>REDIS_URL</code> ; seul nginx est publié (port 80), la base et le cache restent internes. Dans Kubernetes, la base devient un StatefulSet avec son volume, et son mot de passe un Secret.",
         ),
-        table(&["Technologie", "Valeur", "Ce qu'elle apporte"], &techs),
+        table(&["Technologie", "Version", "Ce qu'elle apporte"], &techs),
         h3().text("Choisir la variante").into(),
         para(
-            "La valeur est le tag de l'image, variante comprise : <code>nginx = \"1.29-alpine\"</code>, <code>postgres = \"18-alpine\"</code>, <code>redis = \"8-alpine\"</code>. Pour le code Rust, écrivez la variante de Rust : l'image d'exécution suit, pour que le binaire tourne là où il a été construit.",
+            "La valeur est le tag de l'image, variante comprise : <code>nginx = \"1.30-alpine\"</code>, <code>postgres = \"18-alpine\"</code>, <code>redis = \"8-alpine\"</code>. Pour le code Rust, écrivez la variante de Rust : l'image d'exécution suit, pour que le binaire tourne là où il a été construit.",
         ),
         table(
             &["Vous écrivez", "Construit avec", "Tourne sur"],
@@ -237,8 +244,8 @@ fn versions() -> Vec<Node> {
                 ],
                 &[
                     "Une pile",
-                    "<code>postgres = \"18-alpine\"</code>, <code>nginx = \"1.29-alpine\"</code>",
-                    "<code>postgres:18-alpine</code>, <code>nginx:1.29-alpine</code>",
+                    "<code>postgres = \"18-alpine\"</code>, <code>nginx = \"1.30-alpine\"</code>",
+                    "<code>postgres:18-alpine</code>, <code>nginx:1.30-alpine</code>",
                 ],
                 &[
                     "Du code Rust (pile)",
@@ -289,7 +296,7 @@ fn syntax() -> Vec<Node> {
                 &[
                     "Application",
                     "<code>&lt;nom&gt; { … }</code>",
-                    "<code>web { image = \"nginx:1.29\" }</code>",
+                    "<code>web { image = \"nginx:1.30\" }</code>",
                 ],
                 &[
                     "Variable",
@@ -361,6 +368,9 @@ fn syntax() -> Vec<Node> {
         ),
         para(
             "Dans un objet, les entrées se séparent par une virgule <em>ou</em> par un retour à la ligne. Une clé est un nom (<code>image</code>) ou une chaîne (<code>\"app.conf\"</code>). Les chaînes acceptent les échappements <code>\\n</code>, <code>\\t</code>, <code>\\\"</code> et <code>\\\\</code>.",
+        ),
+        para(
+            "Un nom seul dans un objet vaut <code>true</code> : <code>web { rust nginx postgres }</code>. Une version s'écrit sans guillemets et reste telle qu'écrite : <code>1.30</code>, <code>18-alpine</code>, <code>1.99-slim-bookworm</code> (<code>1.10</code> ne devient pas <code>1.1</code>). Les valeurs s'assemblent avec <code>+</code> et, dans une liste, les virgules sont facultatives.",
         ),
         h3().text("Commentaires").into(),
         drc(

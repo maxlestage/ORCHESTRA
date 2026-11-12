@@ -45,6 +45,7 @@ pub fn drc(source: &str) -> String {
     let chars: Vec<char> = source.chars().collect();
     let mut out = String::with_capacity(source.len() * 2);
     let mut i = 0;
+    let mut depth = 0usize;
     let collect = |from: usize, to: usize| chars[from..to].iter().collect::<String>();
     while i < chars.len() {
         let c = chars[i];
@@ -75,12 +76,20 @@ pub fn drc(source: &str) -> String {
             || (c == '-' && chars.get(i + 1).is_some_and(char::is_ascii_digit))
         {
             i += 1;
+            // Une version sans guillemets (`1.30-alpine`) se lit comme un texte.
             while i < chars.len()
-                && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == '_')
+                && (chars[i].is_ascii_alphanumeric() || matches!(chars[i], '.' | '_' | '-'))
             {
                 i += 1;
             }
-            span(&mut out, "number", &collect(start, i));
+            let token = collect(start, i);
+            let class =
+                if token[1..].contains(|c: char| c == '.' || c == '-' || c.is_ascii_alphabetic()) {
+                    "string"
+                } else {
+                    "number"
+                };
+            span(&mut out, class, &token);
         } else if c.is_alphabetic() || c == '_' {
             while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
                 i += 1;
@@ -104,13 +113,22 @@ pub fn drc(source: &str) -> String {
                 .all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
             {
                 "const"
-            } else if next == Some('=') {
+            } else if next == Some('=')
+                || depth > 0 && matches!(next, Some(',' | '}' | '\n') | None)
+                || depth > 0 && next.is_some_and(char::is_alphabetic)
+            {
+                // `image =`, ou un nom seul dans un bloc : `web { rust nginx }`.
                 "key"
             } else {
                 "ident"
             };
             span(&mut out, class, &word);
         } else if "{}[]()".contains(c) {
+            match c {
+                '{' => depth += 1,
+                '}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
             i += 1;
             span(&mut out, "punct", &c.to_string());
         } else {
@@ -265,6 +283,10 @@ mod tests {
         assert!(html.contains("<span class=\"t-section\">k8s</span>"));
         assert!(html.contains("<span class=\"t-key\">n</span>"));
         assert!(html.contains("<span class=\"t-call\">f</span>"));
+        let html = drc("web { rust nginx = 1.30-alpine }");
+        assert!(html.contains("<span class=\"t-key\">rust</span>"));
+        assert!(html.contains("<span class=\"t-key\">nginx</span>"));
+        assert!(html.contains("<span class=\"t-string\">1.30-alpine</span>"));
     }
 
     #[test]

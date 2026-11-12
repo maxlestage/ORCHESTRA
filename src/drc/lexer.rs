@@ -214,7 +214,8 @@ impl Lexer {
     fn number(&mut self) -> Result<Tok, Error> {
         let start = self.pos();
         let mut text = String::new();
-        if self.peek() == Some('-') {
+        let negative = self.peek() == Some('-');
+        if negative {
             text.push('-');
             self.bump();
         }
@@ -232,6 +233,28 @@ impl Lexer {
             } else {
                 break;
             }
+        }
+        // Une version écrite sans guillemets (`1.30`, `18-alpine`, `1.99-slim-bookworm`)
+        // est un texte, tel qu'il est écrit : `1.10` ne devient pas `1.1`.
+        let versiony = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_');
+        if !negative
+            && (float
+                || self
+                    .peek()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '-' || c == '.'))
+        {
+            while let Some(c) = self.peek() {
+                if versiony(c) {
+                    text.push(c);
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+            if text.ends_with(['-', '.']) {
+                return Err(Error::at(start, format!("version incomplète `{text}`")));
+            }
+            return Ok(Tok::Str(text));
         }
         if float {
             text.parse()
@@ -303,5 +326,32 @@ mod tests {
         let err = tokenize("x = \"ouvert").unwrap_err();
         assert_eq!((err.pos.line, err.pos.col), (1, 5));
         assert!(tokenize("x = @").is_err());
+    }
+}
+
+#[cfg(test)]
+mod versions {
+    use super::*;
+
+    #[test]
+    fn versions_without_quotes_keep_their_text() {
+        let kinds: Vec<Tok> = tokenize("1.10 18-alpine 1.99-slim-bookworm 8 -2.5 3.24")
+            .unwrap()
+            .into_iter()
+            .map(|t| t.kind)
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                Tok::Str("1.10".into()),
+                Tok::Str("18-alpine".into()),
+                Tok::Str("1.99-slim-bookworm".into()),
+                Tok::Int(8),
+                Tok::Float(-2.5),
+                Tok::Str("3.24".into()),
+                Tok::Eof
+            ]
+        );
+        assert!(tokenize("18-").is_err());
     }
 }

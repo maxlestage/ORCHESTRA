@@ -3,7 +3,7 @@
 //! ```text
 //! web {
 //!     rust     = "."        # le code de l'application
-//!     nginx    = "1.29"     # devant, renvoie vers l'application
+//!     nginx    = "1.30"     # devant, renvoie vers l'application
 //!     postgres = "18"
 //!     redis    = "8"
 //! }
@@ -169,13 +169,20 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
             "`src` est le dossier du code quand `rust` donne une variante (ex. `rust = \"1.99-alpine\"`, `src = \"./api\"`)",
         ));
     }
-    if rust.is_none() && f.get("image").is_none() {
-        return Err(f.err(
-            "image",
-            "une pile a besoin de son application : `rust = \".\"` pour construire votre code, ou `image = \"…\"`",
-        ));
-    }
-    let image = f.image(rust.as_ref().map(|_| name.to_owned()))?;
+    // L'application est facultative : `data { postgres redis }` donne une base et un cache.
+    let app_image = if rust.is_some() || f.get("image").is_some() {
+        Some(f.image(rust.as_ref().map(|_| name.to_owned()))?)
+    } else {
+        for key in ["version", "port", "replicas", "env"] {
+            if f.get(key).is_some() {
+                return Err(f.err(
+                    key,
+                    format!("`{key}` règle l'application : ajoutez `rust` (votre code) ou `image = \"…\"`"),
+                ));
+            }
+        }
+        None
+    };
     let port = match f.get("port") {
         None => DEFAULT_PORT,
         Some(Value::Int(p)) if (1..=65535).contains(p) => *p,
@@ -202,14 +209,15 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
     let version = |tech: &str| -> Result<Option<String>, Error> {
         match f.get(tech) {
             None => Ok(None),
-            Some(Value::Bool(true)) => Ok(Some("latest".to_owned())),
+            // Un nom seul (`postgres`) : la version récente choisie par le compilateur.
+            Some(Value::Bool(true)) => Ok(Some(default_version(tech).to_owned())),
             Some(value) => match scalar(value) {
                 Some(v) if !v.is_empty() && !v.contains([' ', ':', '/']) => Ok(Some(v)),
                 _ => Err(f.err(
                     tech,
                     format!(
-                        "`{tech}` est une version, par exemple `{tech} = \"{}\"`",
-                        example(tech)
+                        "`{tech}` est une version, par exemple `{tech} = {}`, ou rien (`{tech}` seul)",
+                        default_version(tech)
                     ),
                 )),
             },
@@ -259,45 +267,72 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
     env.extend(f.env()?);
 
     // --- L'application.
-    let mut service = Vec::new();
-    if rust.is_some() {
-        service.push(("build".to_owned(), s(".")));
-    }
-    service.push(("image".to_owned(), s(image.clone())));
-    if nginx.is_none() {
-        service.push(("ports".to_owned(), list(&[format!("{port}:{port}")])));
-        out.published.push((port, port));
-    }
-    service.push(("environment".to_owned(), environment(&env)));
-    let depends: Vec<String> = stores.iter().map(|(st, _)| host_of(st.tech)).collect();
-    if !depends.is_empty() {
-        service.push(("depends_on".to_owned(), list(&depends)));
-    }
-    out.services.push((name.to_owned(), Value::Object(service)));
+    if let Some(image) = &app_image {
+        let mut service = Vec::new();
+        if rust.is_some() {
+            service.push(("build".to_owned(), s(".")));
+        }
+        service.push(("image".to_owned(), s(image.clone())));
+        if nginx.is_none() {
+            service.push(("ports".to_owned(), list(&[format!("{port}:{port}")])));
+            out.published.push((port, port));
+        }
+        service.push(("environment".to_owned(), environment(&env)));
+        let depends: Vec<String> = stores.iter().map(|(st, _)| host_of(st.tech)).collect();
+        if !depends.is_empty() {
+            service.push(("depends_on".to_owned(), list(&depends)));
+        }
+        out.services.push((name.to_owned(), Value::Object(service)));
 
-    let plain: Vec<(String, String)> = env
-        .iter()
-        .filter(|(k, _)| !secret.iter().any(|(sk, _)| sk == k))
-        .cloned()
-        .collect();
-    let mut main = container(name, &image, &[port], &plain);
-    if !secret.is_empty() {
-        envfrom(&mut main, name);
-    }
-    push(
-        &mut out.k8s,
-        "deployment",
-        workload(name, replicas, vec![main], vec![], None),
-    );
-    push(&mut out.k8s, "service", k8s_service(name, port, port));
+        let plain: Vec<(String, String)> = env
+            .iter()
+            .filter(|(k, _)| !secret.iter().any(|(sk, _)| sk == k))
+            .cloned()
+            .collect();
+        let mut main = container(name, image, &[port], &plain);
+        if !secret.is_empty() {
+            envfrom(&mut main, name);
+        }
+        push(
+            &mut out.k8s,
+            "deployment",
+            workload(name, replicas, vec![main], vec![], None),
+        );
+        push(&mut out.k8s, "service", k8s_service(name, port, port));
 
-    if let Some((path, tag)) = &rust {
-        out.dockerfile = Some(dockerfile(path, tag, port));
+        if let Some((path, tag)) = &rust {
+            out.dockerfile = Some(dockerfile(path, tag, port));
+        }
     }
 
-    // --- nginx, devant l'application.
-    let mut entry = (name.to_owned(), port);
-    if let Some(v) = &nginx {
+    // --- nginx, devant l'application (ou seul, avec sa page d'accueil).
+    let mut entry = app_image.as_ref().map(|_| (name.to_owned(), port));
+    if let (Some(v), None) = (&nginx, &app_image) {
+        let svc = host_of("nginx");
+        let image = format!("nginx:{v}");
+        out.services.push((
+            svc.clone(),
+            obj([
+                ("image", s(image.clone())),
+                ("ports", list(&["80:80".to_owned()])),
+            ]),
+        ));
+        out.published.push((80, 80));
+        push(
+            &mut out.k8s,
+            "deployment",
+            workload(
+                &svc,
+                1,
+                vec![container(&svc, &image, &[80], &[])],
+                vec![],
+                None,
+            ),
+        );
+        push(&mut out.k8s, "service", k8s_service(&svc, 80, 80));
+        entry = Some((svc, 80));
+    }
+    if let (Some(v), Some(_)) = (&nginx, &app_image) {
         let svc = host_of("nginx");
         let conf = nginx_conf(name, port);
         out.configs
@@ -351,7 +386,7 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
             ),
         );
         push(&mut out.k8s, "service", k8s_service(&svc, 80, 80));
-        entry = (svc, 80);
+        entry = Some((svc, 80));
     }
 
     // --- Bases de données et caches.
@@ -417,26 +452,28 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
         );
     }
     if let Some(host) = host {
-        push(
-            &mut out.k8s,
-            "ingress",
-            ingress(name, host, &entry.0, entry.1),
-        );
+        let Some((service, port)) = entry else {
+            return Err(f.err(
+                "host",
+                "`host` publie l'application ou nginx : ajoutez `rust`, `image` ou `nginx`",
+            ));
+        };
+        push(&mut out.k8s, "ingress", ingress(name, host, &service, port));
     }
     Ok(out)
 }
 
-/// L'exemple de version d'une technologie, pour les messages d'erreur.
-fn example(tech: &str) -> &'static str {
+/// La version prise quand seul le nom est écrit (`postgres`) : la dernière stable.
+pub fn default_version(tech: &str) -> &'static str {
     match tech {
-        "nginx" => "1.29",
+        "nginx" => "1.30",
         "postgres" => "18",
-        "mysql" => "9.5",
-        "mariadb" => "12",
-        "mongo" => "8",
+        "mysql" => "26",
+        "mariadb" => "13",
+        "mongo" => "9",
         "redis" => "8",
         "valkey" => "9",
-        _ => "1",
+        _ => "latest",
     }
 }
 

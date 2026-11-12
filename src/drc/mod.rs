@@ -201,7 +201,7 @@ pub fn compile_with(
     if apps.is_empty() && explicit.is_empty() {
         return Err(Error::at(
             Pos { line: 1, col: 1 },
-            "rien à générer : ajoutez une application, par exemple `web { image = \"nginx:1.29\" }`",
+            "rien à générer : ajoutez une application, par exemple `web { image = \"nginx:1.30\" }`",
         )
         .in_file(name));
     }

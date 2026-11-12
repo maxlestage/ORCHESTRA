@@ -1,4 +1,4 @@
-//! `web { image = "nginx:1.29" }` : une application en une ligne, déclinée en service
+//! `web { image = "nginx:1.30" }` : une application en une ligne, déclinée en service
 //! Compose, Deployment, Service et Ingress Kubernetes, et Dockerfile pour `build = "rust"`.
 //! Le port des images courantes (nginx, postgres, redis…) est déduit.
 //!
@@ -83,7 +83,7 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
     let mut volumes: Vec<(String, Value)> = Vec::new();
     let mut configs: Vec<(String, Value)> = Vec::new();
     for app in apps {
-        // Une pile (`web { rust = ".", nginx = "1.29", postgres = "18" }`).
+        // Une pile (`web { rust = ".", nginx = "1.30", postgres = "18" }`).
         if stack::is_stack(app) {
             let out = stack::expand(app)?;
             for (public, inside) in out.published {
@@ -388,7 +388,7 @@ impl<'a> Fields<'a, '_> {
             )),
             (None, None, None) => Err(self.err(
                 "image",
-                "il faut une image (`image = \"nginx:1.29\"`) ou `build = \"rust\"`",
+                "il faut une image (`image = \"nginx:1.30\"`) ou `build = \"rust\"`",
             )),
         }
     }

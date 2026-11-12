@@ -1,2 +1,2 @@
 # Une ligne → docker-compose.yml, deployment.yaml, service.yaml
-web { image = "nginx:1.29" }
+web { image = "nginx:1.30" }

@@ -535,8 +535,19 @@ impl Parser<'_> {
             if entries.iter().any(|e| e.key == key) {
                 return Err(Error::at(token.pos, format!("clé `{key}` en double")));
             }
-            self.expect(Tok::Eq, &format!("après la clé `{key}`"))?;
-            let value = self.expr()?;
+            // Un nom seul vaut `true` : `web { rust nginx postgres }`.
+            let value = if matches!(
+                self.peek(),
+                Tok::Ident(_) | Tok::RBrace | Tok::Comma | Tok::Semi
+            ) {
+                Expr {
+                    kind: ExprKind::Bool(true),
+                    pos: token.pos,
+                }
+            } else {
+                self.expect(Tok::Eq, &format!("après la clé `{key}`"))?;
+                self.expr()?
+            };
             entries.push(Entry {
                 key,
                 value,

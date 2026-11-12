@@ -170,11 +170,11 @@ fn an_app_in_one_line() {
     );
     assert!(
         file(&files, "docker-compose.yml")
-            .contains("  web:\n    image: nginx:1.29\n    ports:\n      - \"80:80\"\n")
+            .contains("  web:\n    image: nginx:1.30\n    ports:\n      - \"80:80\"\n")
     );
     let deployment = file(&files, "deployment.yaml");
     assert!(deployment.contains("  replicas: 1\n  selector:\n    matchLabels:\n      app: web\n"));
-    assert!(deployment.contains("        - name: web\n          image: nginx:1.29\n          ports:\n            - containerPort: 80\n"));
+    assert!(deployment.contains("        - name: web\n          image: nginx:1.30\n          ports:\n            - containerPort: 80\n"));
     assert!(file(&files, "service.yaml").contains("    - port: 80\n      targetPort: 80\n"));
 }
 
@@ -220,7 +220,7 @@ fn several_apps_with_a_rust_build_and_a_host() {
 fn apps_and_hand_written_sections_together() {
     let files = drc::compile_str(
         r#"
-        app web { image = "nginx:1.29", port = 80 }
+        app web { image = "nginx:1.30", port = 80 }
         compose { services = { web = { restart = "always" } } }
         k8s { configmap = { name = "web", data = { "a.conf" = "x" } } }
         "#,
@@ -236,7 +236,7 @@ fn apps_and_hand_written_sections_together() {
 #[test]
 fn keywords_are_optional_and_ports_are_known() {
     let files = drc::compile_str(
-        "TAG = \"7\"\ncache { image = \"redis:\" + TAG }\nworker { image = \"acme/worker:1\" }\nlb { image = \"nginx:1.29\", port = false }",
+        "TAG = \"7\"\ncache { image = \"redis:\" + TAG }\nworker { image = \"acme/worker:1\" }\nlb { image = \"nginx:1.30\", port = false }",
     )
     .unwrap();
     let compose = file(&files, "docker-compose.yml");
@@ -245,7 +245,7 @@ fn keywords_are_optional_and_ports_are_known() {
     let services = file(&files, "service.yaml");
     assert_eq!(services.matches("kind: Service").count(), 1);
     // `app` et `var` restent acceptés.
-    assert!(drc::compile_str("var X = \"nginx:1.29\"\napp web { image = X }").is_ok());
+    assert!(drc::compile_str("var X = \"nginx:1.30\"\napp web { image = X }").is_ok());
     // Un nom proche d'un mot-clé est une faute de frappe, pas une application.
     assert!(error("dokcer { base = \"a\" }").contains("vouliez-vous dire `docker`"));
     assert!(
@@ -293,7 +293,7 @@ fn writing_is_forgiving_and_errors_help() {
 fn custom_ports_for_several_apps() {
     let files = drc::compile_str(
         r#"
-        front { image = "nginx:1.29", port = 8080 }          # nginx écoute sur 80
+        front { image = "nginx:1.30", port = 8080 }          # nginx écoute sur 80
         api   { image = "acme/api:2", port = "3001:3000" }
         proxy { image = "acme/proxy:1", ports = [80, "8443:443"] }
         db    { image = "postgres:18-alpine" }
@@ -301,7 +301,7 @@ fn custom_ports_for_several_apps() {
     )
     .unwrap();
     let compose = file(&files, "docker-compose.yml");
-    assert!(compose.contains("  front:\n    image: nginx:1.29\n    ports:\n      - \"8080:80\"\n"));
+    assert!(compose.contains("  front:\n    image: nginx:1.30\n    ports:\n      - \"8080:80\"\n"));
     assert!(compose.contains("      - \"3001:3000\"\n"));
     assert!(compose.contains(
         "  proxy:\n    image: acme/proxy:1\n    ports:\n      - \"80:80\"\n      - \"8443:443\"\n"
@@ -310,7 +310,7 @@ fn custom_ports_for_several_apps() {
 
     let deployment = file(&files, "deployment.yaml");
     assert!(deployment.contains(
-        "          image: nginx:1.29\n          ports:\n            - containerPort: 80\n"
+        "          image: nginx:1.30\n          ports:\n            - containerPort: 80\n"
     ));
     assert!(
         deployment.contains("            - containerPort: 80\n            - containerPort: 443\n")
@@ -326,7 +326,7 @@ fn custom_ports_for_several_apps() {
 #[test]
 fn port_mistakes_are_caught() {
     let collision =
-        error("a { image = \"nginx:1.29\" }\nb {\n  image = \"nginx:1.29\"\n  port = 80\n}");
+        error("a { image = \"nginx:1.30\" }\nb {\n  image = \"nginx:1.30\"\n  port = 80\n}");
     assert_eq!(
         collision,
         "main.drc:4:3 : `b` : le port 80 est déjà publié par `a` ; choisissez un autre port public, par exemple `port = \"81:80\"`"
@@ -341,7 +341,7 @@ fn port_mistakes_are_caught() {
     assert!(error("a { image = \"x:1\", ports = [80, \"80:81\"] }").contains("publié deux fois"));
     // Deux nginx sans port : le second doit choisir.
     assert!(
-        error("a { image = \"nginx:1.29\" }\nb { image = \"nginx:1.29\" }")
+        error("a { image = \"nginx:1.30\" }\nb { image = \"nginx:1.30\" }")
             .contains("déjà publié par `a`")
     );
 }
@@ -474,7 +474,7 @@ fn a_web_stack_in_one_block() {
     // L'application reçoit l'adresse de la base et du cache ; nginx seul est publié.
     assert!(compose.contains("      DATABASE_URL: postgres://postgres:change-me@web-postgres:5432/web\n      REDIS_URL: redis://web-redis:6379\n"));
     assert!(
-        compose.contains("  web-nginx:\n    image: nginx:1.29\n    ports:\n      - \"80:80\"\n")
+        compose.contains("  web-nginx:\n    image: nginx:1.30\n    ports:\n      - \"80:80\"\n")
     );
     assert!(!compose.contains("8080:8080"));
     assert!(compose.contains("      - web-postgres:/var/lib/postgresql/data\n"));
@@ -515,7 +515,7 @@ fn stack_options_and_mistakes() {
         "                name: shop\n                port:\n                  number: 3000\n"
     ));
 
-    assert!(error("web { postgres = \"18\" }").contains("une pile a besoin de son application"));
+    assert!(error("web { port = 3000, postgres }").contains("ajoutez `rust`"));
     assert!(
         error("web { rust = \".\", postgres = \"18\", mysql = \"9\" }")
             .contains("`postgres` et `mysql` donneraient tous deux `DATABASE_URL`")
@@ -528,10 +528,10 @@ fn stack_options_and_mistakes() {
         error("web { rust = \".\", postgress = \"18\" }").contains("vouliez-vous dire `postgres`")
     );
     assert!(
-        error("web { rust = \".\", nginx = \"nginx:1.29\" }").contains("`nginx` est une version")
+        error("web { rust = \".\", nginx = \"nginx:1.30\" }").contains("`nginx` est une version")
     );
     assert!(
-        error("web { rust = \".\", nginx = \"1.29\" }\nfront { image = \"nginx:1.29\" }")
+        error("web { rust = \".\", nginx = \"1.30\" }\nfront { image = \"nginx:1.30\" }")
             .contains("déjà publié par `web`")
     );
 }
@@ -582,11 +582,11 @@ fn rust_variants_choose_the_matching_runtime() {
 
     // Les variantes des services : la valeur est le tag.
     let files = drc::compile_str(
-        "web { rust = \".\", nginx = \"1.29-alpine\", postgres = \"18-alpine\", redis = \"8-alpine\" }",
+        "web { rust = \".\", nginx = \"1.30-alpine\", postgres = \"18-alpine\", redis = \"8-alpine\" }",
     )
     .unwrap();
     let compose = file(&files, "docker-compose.yml");
-    for image in ["nginx:1.29-alpine", "postgres:18-alpine", "redis:8-alpine"] {
+    for image in ["nginx:1.30-alpine", "postgres:18-alpine", "redis:8-alpine"] {
         assert!(compose.contains(&format!("image: {image}\n")), "{image}");
     }
 
@@ -596,4 +596,48 @@ fn rust_variants_choose_the_matching_runtime() {
             .contains("`src` est le dossier du code quand")
     );
     assert!(error("site { build = \"rust:\" }").contains("attend une variante de Rust"));
+}
+
+#[test]
+fn names_alone_and_versions_without_quotes() {
+    // Un nom seul : la dernière version stable, choisie par le compilateur.
+    let files = drc::compile_str("web { rust nginx postgres redis }").unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    for image in ["nginx:1.30", "postgres:18", "redis:8"] {
+        assert!(compose.contains(&format!("image: {image}\n")), "{image}");
+    }
+    assert!(compose.contains("DATABASE_URL: postgres://"));
+    assert!(file(&files, "Dockerfile").contains("FROM rust:1.99-slim AS build\n"));
+
+    // Des versions sans guillemets, gardées telles qu'écrites.
+    let files = drc::compile_str(
+        "web {\n    rust     = 1.99-alpine\n    nginx    = 1.30-alpine\n    postgres = 18-alpine\n    redis    = 8\n}",
+    )
+    .unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("image: nginx:1.30-alpine\n"));
+    assert!(compose.contains("image: postgres:18-alpine\n"));
+    assert!(file(&files, "Dockerfile").contains("FROM alpine:3.24\n"));
+    let files = drc::compile_str("db { image = \"postgres\", version = 17.10 }").unwrap();
+    assert!(file(&files, "docker-compose.yml").contains("image: postgres:17.10\n"));
+
+    // Sans application : juste les services.
+    let files = drc::compile_str("data { postgres redis }").unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("  data-postgres:\n") && compose.contains("  data-redis:\n"));
+    assert!(!compose.contains("  data:\n"));
+    assert!(file(&files, "statefulset.yaml").contains("name: data-postgres"));
+    let files = drc::compile_str("site { nginx, host = \"monsite.fr\" }").unwrap();
+    assert!(
+        file(&files, "docker-compose.yml")
+            .contains("  site-nginx:\n    image: nginx:1.30\n    ports:\n      - \"80:80\"\n")
+    );
+    assert!(!file(&files, "docker-compose.yml").contains("configs:"));
+    assert!(file(&files, "ingress.yaml").contains("name: site-nginx"));
+
+    assert!(
+        error("data { postgres, host = \"a.fr\" }")
+            .contains("`host` publie l'application ou nginx")
+    );
+    assert!(error("web { nginx = 1.30- }").contains("version incomplète"));
 }

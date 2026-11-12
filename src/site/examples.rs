@@ -154,7 +154,7 @@ k8s {
         title: "Avec une erreur",
         source: r#"# Une faute de frappe : le compilateur la trouve, et propose la correction.
 web {
-    imgae = "nginx:1.29"
+    imgae = "nginx:1.30"
 }
 "#,
     },
