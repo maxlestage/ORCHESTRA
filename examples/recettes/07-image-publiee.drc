@@ -1,0 +1,8 @@
+# Une application déjà construite et publiée, avec sa base MariaDB.
+shop {
+    image    = "ghcr.io/acme/shop"
+    version  = 3.2
+    port     = 3000
+    mariadb
+    password = "un-mot-de-passe-solide"
+}

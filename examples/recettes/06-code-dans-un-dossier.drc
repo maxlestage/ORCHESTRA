@@ -1,0 +1,7 @@
+# Le code Rust est dans ./api, construit sur Debian bookworm.
+api {
+    rust = 1.99-slim-bookworm
+    src  = "./api"
+    port = 3000
+    postgres
+}

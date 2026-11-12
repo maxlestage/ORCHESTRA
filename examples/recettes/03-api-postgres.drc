@@ -1,0 +1,2 @@
+# Une API en Rust et sa base PostgreSQL : DATABASE_URL est fournie à l'API.
+api { rust, postgres, port = 3000 }

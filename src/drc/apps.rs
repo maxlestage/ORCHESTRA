@@ -143,6 +143,16 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
             docker = Some((dockerfile, app.pos));
         }
         services.extend(a.services());
+        // Un volume nommé (`pgdata:/var/lib/…`) se déclare en haut du fichier Compose ;
+        // un chemin (`./data:/data`) non.
+        for volume in &a.volumes {
+            if let Some((source, _)) = volume.split_once(':')
+                && !source.starts_with(['.', '/', '~', '$'])
+                && !volumes.iter().any(|(v, _)| v == source)
+            {
+                volumes.push((source.to_owned(), Value::Object(Vec::new())));
+            }
+        }
         push(&mut k8s, "deployment", a.deployment());
         if let Some(service) = a.k8s_service() {
             push(&mut k8s, "service", service);

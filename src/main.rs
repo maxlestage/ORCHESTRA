@@ -100,9 +100,21 @@ fn cli(args: &[String], write: bool) -> ExitCode {
         eprintln!("erreur : {} : {e}", out.display());
         return ExitCode::FAILURE;
     }
+    // Le code est à côté du fichier .drc : si les fichiers sont écrits ailleurs
+    // (`--out deploy`), le `build` de Compose doit encore y mener.
+    let project = input
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let has_dockerfile = files.iter().any(|f| f.name == "Dockerfile");
     for file in &files {
         let path = out.join(&file.name);
-        if let Err(e) = std::fs::write(&path, &file.content) {
+        let content = if file.name == "docker-compose.yml" {
+            relocate_builds(&file.content, project, &out, has_dockerfile)
+        } else {
+            file.content.clone()
+        };
+        if let Err(e) = std::fs::write(&path, &content) {
             eprintln!("erreur : {} : {e}", path.display());
             return ExitCode::FAILURE;
         }
@@ -166,6 +178,57 @@ fn export(args: &[String]) -> ExitCode {
     }
 }
 
+/// Réécrit les `build:` d'un fichier Compose écrit dans `out` pour un projet situé dans
+/// `project` : le contexte mène au projet, et le Dockerfile généré est retrouvé dans `out`.
+fn relocate_builds(compose: &str, project: &Path, out: &Path, has_dockerfile: bool) -> String {
+    let (Ok(project), Ok(out)) = (project.canonicalize(), out.canonicalize()) else {
+        return compose.to_owned();
+    };
+    if project == out {
+        return compose.to_owned();
+    }
+    let mut result = String::with_capacity(compose.len());
+    for line in compose.split_inclusive('\n') {
+        let indent = line.len() - line.trim_start().len();
+        match line.trim().strip_prefix("build: ") {
+            Some(dir) => {
+                let pad = " ".repeat(indent);
+                let source = project.join(dir.trim_matches('"'));
+                let context = relative(&out, &source);
+                result.push_str(&format!("{pad}build:\n{pad}  context: {context}\n"));
+                if dir == "." && has_dockerfile {
+                    let dockerfile = relative(&source, &out.join("Dockerfile"));
+                    result.push_str(&format!("{pad}  dockerfile: {dockerfile}\n"));
+                }
+            }
+            None => result.push_str(line),
+        }
+    }
+    result
+}
+
+/// Le chemin de `to` vu depuis le dossier `from` (`../src`, `deploy/Dockerfile`…).
+fn relative(from: &Path, to: &Path) -> String {
+    let from: Vec<_> = from.components().collect();
+    let to_parts: Vec<_> = to.components().collect();
+    let common = from
+        .iter()
+        .zip(&to_parts)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let mut parts: Vec<String> = vec!["..".to_owned(); from.len() - common];
+    parts.extend(
+        to_parts[common..]
+            .iter()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
+    );
+    if parts.is_empty() {
+        ".".to_owned()
+    } else {
+        parts.join("/")
+    }
+}
+
 fn usage_error(message: &str) -> ExitCode {
     eprintln!("orchestra : {message}\n\n{USAGE}");
     ExitCode::from(2)
@@ -191,4 +254,33 @@ fn compile_file(path: &Path, overrides: &[(String, String)]) -> Result<Vec<Gener
         overrides,
     )
     .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builds_still_lead_to_the_code() {
+        assert_eq!(relative(Path::new("/p/deploy"), Path::new("/p")), "..");
+        assert_eq!(
+            relative(Path::new("/p"), Path::new("/p/deploy/Dockerfile")),
+            "deploy/Dockerfile"
+        );
+        assert_eq!(relative(Path::new("/p/a/b"), Path::new("/p/c")), "../../c");
+        assert_eq!(relative(Path::new("/p"), Path::new("/p")), ".");
+
+        let dir = std::env::temp_dir().join(format!("orchestra-out-{}", std::process::id()));
+        let out = dir.join("deploy");
+        std::fs::create_dir_all(&out).unwrap();
+        let compose =
+            "services:\n  web:\n    build: .\n    image: web:latest\n  api:\n    build: ./api\n";
+        let moved = relocate_builds(compose, &dir, &out, true);
+        assert_eq!(
+            moved,
+            "services:\n  web:\n    build:\n      context: ..\n      dockerfile: deploy/Dockerfile\n    image: web:latest\n  api:\n    build:\n      context: ../api\n"
+        );
+        assert_eq!(relocate_builds(compose, &dir, &dir, true), compose);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

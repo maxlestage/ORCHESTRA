@@ -49,10 +49,35 @@ $ orchestra build app.drc --out deploy
 ✓ deploy/service.yaml
 ```
 
+## Le guide
+
+Le [guide](https://maxlestage.github.io/ORCHESTRA/guide) explique tout par l'exemple :
+premiers pas (de l'installation au déploiement), quatorze recettes avec les fichiers qu'elles
+produisent, l'usage des fichiers générés (Compose, Kubernetes, intégration continue), les erreurs
+fréquentes et leur correction, et une FAQ. Les recettes sont aussi dans `examples/recettes/` :
+
+| Recette | Fichier |
+|---|---|
+| Un site statique | `01-site-statique.drc` |
+| Une API en Rust | `02-api-rust.drc` |
+| Une API et sa base PostgreSQL | `03-api-postgres.drc` |
+| Un site complet (Rust, nginx, PostgreSQL, Redis) | `04-site-complet.drc` |
+| Choisir les variantes (alpine…) | `05-variantes.drc` |
+| Le code dans un sous-dossier | `06-code-dans-un-dossier.drc` |
+| Une image déjà publiée, avec MariaDB | `07-image-publiee.drc` |
+| Juste une base et un cache | `08-base-et-cache.drc` |
+| Plusieurs services | `09-microservices.drc` |
+| En production (domaine, instances, mot de passe) | `10-production.drc` |
+| Les versions au même endroit | `11-versions-centralisees.drc` |
+| Plusieurs conteneurs ensemble | `12-plusieurs-conteneurs.drc` |
+| MongoDB et Valkey | `13-mongo-valkey.drc` |
+| Compléter à la main | `14-completer.drc` |
+
 ## Le site
 
 - **Accueil** : une scène animée en 2D (SVG et CSS), la démarche en trois étapes, les cinq
   principes et un exemple compilé en direct à chaque affichage.
+- **Guide** (`/guide`) : premiers pas, recettes, déploiement, erreurs, FAQ.
 - **Langage** (`/langage`) : la spécification complète.
 - **Bac à sable** (`/bac-a-sable`, `/bac-a-sable/k8s`…) : un éditeur dont le fichier est compilé
   par le serveur, ou dans le navigateur pendant la frappe quand `orchestra.wasm` est publié, avec

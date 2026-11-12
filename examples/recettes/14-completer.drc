@@ -1,0 +1,14 @@
+# Une application, complétée à la main : redémarrage automatique (Compose)
+# et un fichier de configuration (ConfigMap Kubernetes).
+web { image = "nginx:1.30" }
+
+compose {
+    services = { web = { restart = "unless-stopped" } }
+}
+
+k8s {
+    configmap = {
+        name = "web-config"
+        data = { "app.conf" = "log_level=info\n" }
+    }
+}

@@ -1,0 +1,5 @@
+# Un site statique : nginx sert le dossier ./public.
+site {
+    image   = "nginx:1.30"
+    volumes = ["./public:/usr/share/nginx/html:ro"]
+}

@@ -461,6 +461,33 @@ details.file[open] .code { animation: unfold .35s ease both; }
 }
 .tree { font-size: .8rem; }
 
+/* ---------- Guide ---------- */
+
+.tutorial { padding-left: 1.4rem; }
+.tutorial > li { margin: 0 0 1.5rem; padding-left: .25rem; }
+.tutorial > li::marker { color: var(--rust); font-weight: 800; }
+.tutorial h3 { margin: 0 0 .3rem; }
+.recipe, .mistake {
+  margin: 1.5rem 0 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed var(--line);
+  min-width: 0;
+}
+.recipe h3, .mistake h3 { margin-top: 0; font-size: 1.25rem; }
+.recipe .outputs { margin-bottom: 1rem; }
+.recipe .code, .mistake .code { margin-block: .5rem 1rem; }
+.need { font-size: 1.02rem; }
+.fix { margin-bottom: 0; }
+.mistake .status { margin: .5rem 0 1rem; }
+details.faq {
+  margin: .6rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+details.faq summary { padding: .85rem 1rem; cursor: pointer; font-weight: 700; }
+details.faq p { margin: 0; padding: 0 1rem 1rem; color: var(--muted); }
+
 /* ---------- Bac à sable ---------- */
 
 .sandbox { display: grid; gap: 1.5rem; padding-block: 2rem 3rem; }
