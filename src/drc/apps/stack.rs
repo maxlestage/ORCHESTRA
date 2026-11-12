@@ -12,19 +12,22 @@
 //! Le compilateur relie tout : configuration nginx, `DATABASE_URL` et `REDIS_URL` dans
 //! l'application, volumes de données, StatefulSet et Secret Kubernetes, Ingress pour `host`.
 
+use super::langs::{self, LANGS};
 use super::{Fields, list, obj, push, s, scalar, valid_name};
 use crate::drc::eval::AppValue;
 use crate::drc::{Error, Value};
 
 /// Les technologies qu'une pile sait assembler.
 pub const TECHS: &[&str] = &[
-    "rust", "nginx", "postgres", "mysql", "mariadb", "mongo", "redis", "valkey",
+    "rust", "go", "node", "python", "java", "php", "nginx", "postgres", "mysql", "mariadb",
+    "mongo", "redis", "valkey",
 ];
 
 /// Toutes les clés d'une pile.
 pub const KEYS: &[&str] = &[
-    "rust", "src", "image", "version", "port", "replicas", "env", "host", "password", "nginx",
-    "postgres", "mysql", "mariadb", "mongo", "redis", "valkey",
+    "rust", "go", "node", "python", "java", "php", "src", "image", "version", "port", "replicas",
+    "env", "command", "host", "password", "nginx", "postgres", "mysql", "mariadb", "mongo",
+    "redis", "valkey",
 ];
 
 /// Une pile : un bloc qui nomme au moins une technologie.
@@ -141,50 +144,80 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
         }
     }
 
-    // L'application : du code Rust à construire, ou une image toute faite.
-    // `rust = "."` (un dossier) ou `rust = "1.99-alpine"` (une variante de Rust) ;
-    // `src` donne le dossier quand la variante est écrite.
-    let rust = match f.get("rust") {
+    // L'application : du code à construire (un langage), ou une image toute faite.
+    // `node` (le dossier du fichier .drc), `node = "./web"` (un dossier) ou
+    // `node = 26-alpine` (une variante) ; `src` donne le dossier avec une variante.
+    let written: Vec<&str> = LANGS
+        .iter()
+        .copied()
+        .filter(|l| f.get(l).is_some())
+        .collect();
+    if let [first, second, ..] = written[..] {
+        return Err(f.err(
+            second,
+            format!(
+                "une pile construit un seul langage (`{first}` et `{second}`) : mettez l'autre dans un bloc à part"
+            ),
+        ));
+    }
+    // (langage, dossier du code, variante)
+    let code: Option<(&str, String, String)> = match written.first() {
         None => None,
-        Some(Value::Bool(true)) => Some((".".to_owned(), super::RUST_DEFAULT.to_owned())),
-        Some(Value::Str(path)) if path.starts_with(['.', '/']) => {
-            Some((path.clone(), super::RUST_DEFAULT.to_owned()))
-        }
-        Some(Value::Str(tag)) if super::rust_tag(tag) => {
-            let src = f.text("src")?.unwrap_or(".").to_owned();
-            Some((src, tag.clone()))
-        }
-        Some(_) => {
-            return Err(f.err(
-                "rust",
-                "`rust` est le dossier du code (`rust = \".\"`) ou une variante de Rust (`rust = \"1.99-alpine\"`, `rust = \"1.99-slim-bookworm\"`)",
-            ));
+        Some(&lang) => {
+            let default = langs::default_tag(lang).to_owned();
+            match f.get(lang) {
+                Some(Value::Bool(true)) => Some((lang, ".".to_owned(), default)),
+                Some(Value::Str(path)) if path.starts_with(['.', '/']) => {
+                    Some((lang, path.clone(), default))
+                }
+                Some(value) => match scalar(value).filter(|t| langs::valid_tag(t)) {
+                    Some(tag) => {
+                        let src = f.text("src")?.unwrap_or(".").to_owned();
+                        Some((lang, src, tag))
+                    }
+                    None => {
+                        return Err(f.err(
+                            lang,
+                            format!(
+                                "`{lang}` est le dossier du code (`{lang} = \"./web\"`), une variante (`{lang} = {}`) ou rien (`{lang}` seul)",
+                                langs::default_tag(lang)
+                            ),
+                        ));
+                    }
+                },
+                None => None,
+            }
         }
     };
     if f.get("src").is_some()
-        && !matches!(f.get("rust"), Some(Value::Str(t)) if !t.starts_with(['.', '/']))
+        && !written.first().is_some_and(|l| {
+            !matches!(f.get(l), Some(Value::Str(t)) if t.starts_with(['.', '/']))
+                && !matches!(f.get(l), Some(Value::Bool(true)))
+        })
     {
         return Err(f.err(
             "src",
-            "`src` est le dossier du code quand `rust` donne une variante (ex. `rust = \"1.99-alpine\"`, `src = \"./api\"`)",
+            "`src` est le dossier du code quand le langage donne une variante (ex. `node = 26-alpine`, `src = \"./web\"`)",
         ));
     }
     // L'application est facultative : `data { postgres redis }` donne une base et un cache.
-    let app_image = if rust.is_some() || f.get("image").is_some() {
-        Some(f.image(rust.as_ref().map(|_| name.to_owned()))?)
+    let app_image = if code.is_some() || f.get("image").is_some() {
+        Some(f.image(code.as_ref().map(|_| name.to_owned()))?)
     } else {
-        for key in ["version", "port", "replicas", "env"] {
+        for key in ["version", "port", "replicas", "env", "command"] {
             if f.get(key).is_some() {
                 return Err(f.err(
                     key,
-                    format!("`{key}` règle l'application : ajoutez `rust` (votre code) ou `image = \"…\"`"),
+                    format!("`{key}` règle l'application : ajoutez son langage (`rust`, `go`, `node`, `python`, `java`, `php`) ou `image = \"…\"`"),
                 ));
             }
         }
         None
     };
     let port = match f.get("port") {
-        None => DEFAULT_PORT,
+        None => code
+            .as_ref()
+            .map_or(DEFAULT_PORT, |(lang, _, _)| langs::default_port(lang)),
         Some(Value::Int(p)) if (1..=65535).contains(p) => *p,
         Some(_) => {
             return Err(f.err(
@@ -193,6 +226,7 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
             ));
         }
     };
+    let command = f.command()?;
     let replicas = match f.get("replicas") {
         None => 1,
         Some(Value::Int(n)) if *n >= 0 => *n,
@@ -269,10 +303,15 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
     // --- L'application.
     if let Some(image) = &app_image {
         let mut service = Vec::new();
-        if rust.is_some() {
+        if code.is_some() {
             service.push(("build".to_owned(), s(".")));
         }
         service.push(("image".to_owned(), s(image.clone())));
+        // Pour une image toute faite, `command` remplace sa commande ; pour du code, elle
+        // va dans le Dockerfile.
+        if code.is_none() && !command.is_empty() {
+            service.push(("command".to_owned(), list(&command)));
+        }
         if nginx.is_none() {
             service.push(("ports".to_owned(), list(&[format!("{port}:{port}")])));
             out.published.push((port, port));
@@ -300,8 +339,9 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
         );
         push(&mut out.k8s, "service", k8s_service(name, port, port));
 
-        if let Some((path, tag)) = &rust {
-            out.dockerfile = Some(dockerfile(path, tag, port));
+        if let Some((lang, path, tag)) = &code {
+            let techs: Vec<&str> = stores.iter().map(|(st, _)| st.tech).collect();
+            out.dockerfile = Some(langs::dockerfile(lang, path, tag, port, &command, &techs));
         }
     }
 
@@ -455,7 +495,7 @@ pub fn expand(app: &AppValue) -> Result<Output, Error> {
         let Some((service, port)) = entry else {
             return Err(f.err(
                 "host",
-                "`host` publie l'application ou nginx : ajoutez `rust`, `image` ou `nginx`",
+                "`host` publie l'application ou nginx : ajoutez un langage (`rust`, `node`…), `image` ou `nginx`",
             ));
         };
         push(&mut out.k8s, "ingress", ingress(name, host, &service, port));
@@ -669,29 +709,4 @@ fn nginx_conf(app: &str, port: i64) -> String {
 }}
 "
     )
-}
-
-/// Le Dockerfile du code Rust : `cargo install` construit le binaire, quel que soit son nom.
-fn dockerfile(path: &str, tag: &str, port: i64) -> Value {
-    let (base, run) = super::rust_images(tag);
-    obj([
-        ("base", s(base)),
-        ("workdir", s("/app")),
-        (
-            "copy",
-            Value::List(vec![obj([("src", s(path)), ("dst", s("."))])]),
-        ),
-        (
-            "build",
-            list(&[
-                "cargo install --path . --root /out".to_owned(),
-                "mv /out/bin/* /app/server".to_owned(),
-            ]),
-        ),
-        ("from", s(run)),
-        ("artifacts", list(&["server".to_owned()])),
-        ("env", obj([("PORT", Value::Int(port))])),
-        ("expose", Value::List(vec![Value::Int(port)])),
-        ("run", list(&["./server".to_owned()])),
-    ])
 }

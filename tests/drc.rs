@@ -283,10 +283,31 @@ fn writing_is_forgiving_and_errors_help() {
     );
     assert!(error("docker { bsae = \"a\" }").contains("vouliez-vous dire `base`"));
     assert!(error("app a { image = \"x\", host = \"a.fr\" }").contains("il lui faut un `port`"));
+}
+
+#[test]
+fn several_apps_to_build_get_one_dockerfile_each() {
+    let files = drc::compile_str(include_str!(
+        "../examples/recettes/20-plusieurs-langages.drc"
+    ))
+    .unwrap();
+    let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(&names[..2], ["Dockerfile.front", "Dockerfile.api"]);
+    assert!(file(&files, "Dockerfile.front").contains("FROM node:26-alpine\n"));
+    assert!(file(&files, "Dockerfile.api").contains("FROM golang:1.27-alpine AS build\n"));
+    let compose = file(&files, "docker-compose.yml");
     assert!(
-        error("app a { build = \"rust\" }\napp b { build = \"rust\" }")
-            .contains("un seul Dockerfile")
+        compose.contains(
+            "  front:\n    build:\n      context: .\n      dockerfile: Dockerfile.front\n"
+        )
     );
+    assert!(
+        compose
+            .contains("  api:\n    build:\n      context: .\n      dockerfile: Dockerfile.api\n")
+    );
+    // Une seule application construite : `Dockerfile`, comme avant.
+    let files = drc::compile_str("web { node }").unwrap();
+    assert_eq!(files[0].name, "Dockerfile");
 }
 
 #[test]
@@ -515,7 +536,7 @@ fn stack_options_and_mistakes() {
         "                name: shop\n                port:\n                  number: 3000\n"
     ));
 
-    assert!(error("web { port = 3000, postgres }").contains("ajoutez `rust`"));
+    assert!(error("web { port = 3000, postgres }").contains("ajoutez son langage"));
     assert!(
         error("web { rust = \".\", postgres = \"18\", mysql = \"9\" }")
             .contains("`postgres` et `mysql` donneraient tous deux `DATABASE_URL`")
@@ -590,7 +611,7 @@ fn rust_variants_choose_the_matching_runtime() {
         assert!(compose.contains(&format!("image: {image}\n")), "{image}");
     }
 
-    assert!(error("web { rust = \"1.99 alpine\" }").contains("variante de Rust"));
+    assert!(error("web { rust = \"1.99 alpine\" }").contains("une variante (`rust = 1.99-slim`)"));
     assert!(
         error("web { rust = \".\", src = \"./api\" }")
             .contains("`src` est le dossier du code quand")
@@ -652,4 +673,54 @@ fn named_volumes_are_declared() {
     let files =
         drc::compile_str(include_str!("../examples/recettes/01-site-statique.drc")).unwrap();
     assert!(!file(&files, "docker-compose.yml").contains("\nvolumes:"));
+}
+
+#[test]
+fn other_languages() {
+    let dockerfile = |source: &str| -> String {
+        let files = drc::compile_str(source).unwrap();
+        file(&files, "Dockerfile")
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    assert_eq!(
+        dockerfile("web { node }"),
+        "FROM node:26-slim | WORKDIR /app | COPY . . | RUN npm ci --omit=dev || npm install --omit=dev | ENV NODE_ENV=\"production\" | ENV PORT=\"8080\" | EXPOSE 8080 | CMD [\"npm\", \"start\"]"
+    );
+    assert!(
+        dockerfile("api { python = 3.15-alpine }")
+            .starts_with("FROM python:3.15-alpine | WORKDIR /app")
+    );
+    assert!(dockerfile("api { python }").ends_with("CMD [\"python\", \"main.py\"]"));
+    assert!(
+        dockerfile("api { python, command = \"uvicorn main:app\" }")
+            .ends_with("CMD [\"uvicorn\", \"main:app\"]")
+    );
+    assert_eq!(
+        dockerfile("api { go = 1.27-alpine }"),
+        "FROM golang:1.27-alpine AS build | WORKDIR /app | COPY . . | RUN CGO_ENABLED=0 go build -o /app/server . | FROM alpine:3.24 | WORKDIR /app | COPY --from=build /app/server server | ENV PORT=\"8080\" | EXPOSE 8080 | CMD [\"./server\"]"
+    );
+    assert!(dockerfile("svc { java }").contains("FROM maven:3-eclipse-temurin-25 AS build"));
+    assert!(dockerfile("svc { java = 25-alpine }").contains("FROM eclipse-temurin:25-jre-alpine"));
+    let php = dockerfile("blog { php mariadb }");
+    assert!(php.starts_with("FROM php:8.5-apache | WORKDIR /var/www/html | COPY . . | RUN docker-php-ext-install pdo_mysql mysqli"));
+    assert!(php.contains("EXPOSE 80"));
+    assert!(dockerfile("blog { php postgres }").contains("libpq-dev"));
+
+    // Une pile PHP : nginx renvoie vers le port 80 de l'application.
+    let files = drc::compile_str("blog { php nginx mariadb }").unwrap();
+    assert!(file(&files, "configmap.yaml").contains("proxy_pass http://blog:80;"));
+
+    // Une application simple : `build = "node"`.
+    let files = drc::compile_str("front { build = \"node:26-alpine\" }").unwrap();
+    assert!(file(&files, "Dockerfile").contains("FROM node:26-alpine\n"));
+    assert!(file(&files, "docker-compose.yml").contains(
+        "  front:\n    build: .\n    image: front:latest\n    ports:\n      - \"8080:8080\"\n"
+    ));
+
+    assert!(error("x { node python }").contains("une pile construit un seul langage"));
+    assert!(error("x { node, src = \"./web\" }").contains("`src` est le dossier du code quand"));
+    assert!(error("x { build = \"go:1 27\" }").contains("attend une variante"));
 }

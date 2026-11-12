@@ -11,21 +11,21 @@ pub fn files(sections: &[SectionValue]) -> Result<Vec<GeneratedFile>, Error> {
     let mut out = Vec::new();
     // Toujours le même ordre : Dockerfile, Compose, puis Kubernetes.
     for wanted in [Section::Docker, Section::Compose, Section::K8s] {
-        let Some(section) = sections.iter().find(|s| s.section == wanted) else {
-            continue;
-        };
-        let check = Check { pos: section.pos };
-        let entries = check.object(&section.value, wanted.name())?;
-        match wanted {
-            Section::Docker => out.push(GeneratedFile {
-                name: "Dockerfile".into(),
-                content: dockerfile(&check, entries)?,
-            }),
-            Section::Compose => out.push(GeneratedFile {
-                name: "docker-compose.yml".into(),
-                content: compose(&check, &section.value, entries)?,
-            }),
-            Section::K8s => out.extend(kubernetes(&check, entries)?),
+        // Plusieurs Dockerfiles possibles (un par application construite).
+        for section in sections.iter().filter(|s| s.section == wanted) {
+            let check = Check { pos: section.pos };
+            let entries = check.object(&section.value, wanted.name())?;
+            match wanted {
+                Section::Docker => out.push(GeneratedFile {
+                    name: section.file.clone().unwrap_or_else(|| "Dockerfile".into()),
+                    content: dockerfile(&check, entries)?,
+                }),
+                Section::Compose => out.push(GeneratedFile {
+                    name: "docker-compose.yml".into(),
+                    content: compose(&check, &section.value, entries)?,
+                }),
+                Section::K8s => out.extend(kubernetes(&check, entries)?),
+            }
         }
     }
     Ok(out)
