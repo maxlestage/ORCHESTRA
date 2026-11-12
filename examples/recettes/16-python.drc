@@ -1,0 +1,6 @@
+# Une API Python (FastAPI), lancée avec uvicorn, et son cache Redis.
+api {
+    python  = 3.15-slim
+    command = "uvicorn main:app --host 0.0.0.0 --port 8080"
+    redis
+}

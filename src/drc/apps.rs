@@ -15,6 +15,7 @@
 //! Les sections `docker`, `compose` et `k8s` écrites à la main restent possibles : elles
 //! complètent ce que les applications génèrent, ou le remplacent clé par clé.
 
+mod langs;
 mod stack;
 
 use super::eval::{AppValue, SectionValue, merge};
@@ -74,7 +75,9 @@ fn rust_images(tag: &str) -> (String, String) {
 
 /// Les sections générées par les applications, complétées par les sections écrites.
 pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<SectionValue>, Error> {
-    let mut docker: Option<(Value, Pos)> = None;
+    // Les Dockerfiles : (application, contenu, position). Un seul s'appelle `Dockerfile` ;
+    // à plusieurs, chacun s'appelle `Dockerfile.<application>`.
+    let mut docker: Vec<(String, Value, Pos)> = Vec::new();
     let mut services = Vec::new();
     let mut k8s: Vec<(String, Value)> = Vec::new();
     // Compose publie chaque port sur la machine : deux applications ne peuvent pas
@@ -86,26 +89,21 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
         // Une pile (`web { rust = ".", nginx = "1.30", postgres = "18" }`).
         if stack::is_stack(app) {
             let out = stack::expand(app)?;
-            for (public, inside) in out.published {
+            for (public, _) in out.published {
                 if let Some((_, owner)) = published.iter().find(|(p, _)| *p == public) {
                     return Err(Error::at(
                         app.pos,
                         format!(
-                            "`{}` publie le port {public}, déjà publié par `{owner}` (port {inside} à l'intérieur)",
-                            app.name
+                            "`{}` : le port {public} est déjà publié par `{owner}` ; choisissez un autre port, par exemple `port = {}`",
+                            app.name,
+                            free_port(public, &published)
                         ),
                     ));
                 }
                 published.push((public, app.name.clone()));
             }
             if let Some(dockerfile) = out.dockerfile {
-                if docker.is_some() {
-                    return Err(Error::at(
-                        app.pos,
-                        "une seule application peut être construite en Rust (un seul Dockerfile)",
-                    ));
-                }
-                docker = Some((dockerfile, app.pos));
+                docker.push((app.name.clone(), dockerfile, app.pos));
             }
             services.extend(out.services);
             for (kind, value) in out.k8s {
@@ -134,13 +132,7 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
             published.push((public, a.main.name.clone()));
         }
         if let Some(dockerfile) = a.dockerfile() {
-            if docker.is_some() {
-                return Err(Error::at(
-                    app.pos,
-                    "une seule application peut être construite en Rust (un seul Dockerfile)",
-                ));
-            }
-            docker = Some((dockerfile, app.pos));
+            docker.push((app.name.clone(), dockerfile, app.pos));
         }
         services.extend(a.services());
         // Un volume nommé (`pgdata:/var/lib/…`) se déclare en haut du fichier Compose ;
@@ -164,11 +156,21 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
 
     let first = apps.first().map(|a| a.pos).unwrap_or_default();
     let mut sections = Vec::new();
-    if let Some((value, pos)) = docker {
+    let several = docker.len() > 1;
+    for (app, value, pos) in docker {
+        let file = several.then(|| format!("Dockerfile.{app}"));
+        // Le service Compose de l'application désigne son Dockerfile.
+        if let Some(file) = &file
+            && let Some((_, Value::Object(service))) = services.iter_mut().find(|(n, _)| *n == app)
+            && let Some((_, build)) = service.iter_mut().find(|(k, _)| k == "build")
+        {
+            *build = obj([("context", s(".")), ("dockerfile", s(file.clone()))]);
+        }
         sections.push(SectionValue {
             section: Section::Docker,
             value,
             pos,
+            file,
         });
     }
     if !services.is_empty() {
@@ -183,11 +185,13 @@ pub fn expand(apps: &[AppValue], explicit: Vec<SectionValue>) -> Result<Vec<Sect
             section: Section::Compose,
             value: Value::Object(compose),
             pos: first,
+            file: None,
         });
         sections.push(SectionValue {
             section: Section::K8s,
             value: Value::Object(k8s),
             pos: first,
+            file: None,
         });
     }
 
@@ -548,6 +552,8 @@ struct App<'a> {
     with: Vec<Container>,
     /// `build = "rust"` ou `"rust:1.99-alpine"` : la variante de Rust du Dockerfile.
     rust: Option<String>,
+    /// `build = "node"`, `"go:1.27-alpine"`… : un autre langage et sa variante.
+    lang: Option<(&'static str, String)>,
     /// Un autre `build` : le dossier de construction Compose.
     build: Option<&'a str>,
     replicas: i64,
@@ -600,10 +606,38 @@ impl<'a> App<'a> {
             },
             None => None,
         };
+        // `build = "node"` ou `build = "node:26-alpine"` : un autre langage.
+        let mut lang = None;
+        if let Some(b) = build {
+            let (word, tag) = b.split_once(':').unwrap_or((b, ""));
+            if let Some(l) = langs::LANGS.iter().find(|l| **l == word && **l != "rust") {
+                let tag = if tag.is_empty() {
+                    langs::default_tag(l).to_owned()
+                } else if langs::valid_tag(tag) {
+                    tag.to_owned()
+                } else {
+                    return Err(f.err(
+                        "build",
+                        format!(
+                            "`build = \"{l}:…\"` attend une variante, par exemple `\"{l}:{}\"`",
+                            langs::default_tag(l)
+                        ),
+                    ));
+                };
+                lang = Some((*l, tag));
+            }
+        }
         let image = f.image(build.map(|_| name.to_owned()))?;
         let main = Container {
             name: name.to_owned(),
-            ports: f.ports(&image)?,
+            // Un langage construit écoute sur son port par défaut (8080, 80 pour PHP).
+            ports: match (&lang, f.ports(&image)?) {
+                (Some((l, _)), ports) if ports.is_empty() && f.get("port").is_none() => {
+                    let p = langs::default_port(l);
+                    vec![(p, p)]
+                }
+                (_, ports) => ports,
+            },
             env: f.env()?,
             command: f.command()?,
             image,
@@ -708,7 +742,8 @@ impl<'a> App<'a> {
         Ok(Self {
             main,
             with,
-            build: build.filter(|_| rust.is_none()),
+            build: build.filter(|_| rust.is_none() && lang.is_none()),
+            lang,
             rust,
             replicas,
             volumes: f.words("volumes")?,
@@ -745,6 +780,22 @@ impl<'a> App<'a> {
     }
 
     fn dockerfile(&self) -> Option<Value> {
+        if let Some((lang, tag)) = &self.lang {
+            let port = self
+                .main
+                .inside()
+                .first()
+                .copied()
+                .unwrap_or_else(|| langs::default_port(lang));
+            return Some(langs::dockerfile(
+                lang,
+                ".",
+                tag,
+                port,
+                &self.main.command,
+                &[],
+            ));
+        }
         let (base, run) = rust_images(self.rust.as_deref()?);
         let binary = format!("target/release/{}", self.main.name);
         let mut docker = vec![
@@ -778,10 +829,10 @@ impl<'a> App<'a> {
     fn services(&self) -> Vec<(String, Value)> {
         let name = &self.main.name;
         let mut service = Vec::new();
-        match (&self.rust, self.build) {
-            (Some(_), _) => service.push(("build".to_owned(), s("."))),
-            (None, Some(dir)) => service.push(("build".to_owned(), s(dir))),
-            (None, None) => {}
+        match (self.rust.is_some() || self.lang.is_some(), self.build) {
+            (true, _) => service.push(("build".to_owned(), s("."))),
+            (false, Some(dir)) => service.push(("build".to_owned(), s(dir))),
+            (false, None) => {}
         }
         service.push(("image".to_owned(), s(self.main.image.clone())));
         if !self.main.command.is_empty() {

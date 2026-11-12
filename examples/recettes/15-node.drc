@@ -1,0 +1,2 @@
+# Une application Node.js derrière nginx, avec PostgreSQL.
+web { node nginx postgres }

@@ -39,6 +39,8 @@ pub struct SectionValue {
     pub section: Section,
     pub value: Value,
     pub pos: Pos,
+    /// Le nom du fichier généré, quand il n'est pas celui par défaut (`Dockerfile.api`).
+    pub file: Option<String>,
 }
 
 /// Une application `app nom { … }` évaluée.
@@ -198,6 +200,7 @@ impl<'r> Evaluator<'r> {
                         section,
                         value,
                         pos,
+                        file: None,
                     }),
                 }
                 Ok(())

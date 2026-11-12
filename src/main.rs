@@ -188,8 +188,34 @@ fn relocate_builds(compose: &str, project: &Path, out: &Path, has_dockerfile: bo
         return compose.to_owned();
     }
     let mut result = String::with_capacity(compose.len());
+    // `build:` sur plusieurs lignes : (indentation de `build:`, dossier du contexte).
+    let mut block: Option<(usize, std::path::PathBuf)> = None;
     for line in compose.split_inclusive('\n') {
         let indent = line.len() - line.trim_start().len();
+        if let Some((build_indent, context)) = &block {
+            if indent > *build_indent {
+                let pad = " ".repeat(indent);
+                if let Some(dir) = line.trim().strip_prefix("context: ") {
+                    let source = project.join(dir.trim_matches('"'));
+                    result.push_str(&format!("{pad}context: {}\n", relative(&out, &source)));
+                    block = Some((*build_indent, source));
+                    continue;
+                }
+                if let Some(file) = line.trim().strip_prefix("dockerfile: ") {
+                    let file = out.join(file.trim_matches('"'));
+                    result.push_str(&format!("{pad}dockerfile: {}\n", relative(context, &file)));
+                    continue;
+                }
+                result.push_str(line);
+                continue;
+            }
+            block = None;
+        }
+        if line.trim() == "build:" {
+            block = Some((indent, project.clone()));
+            result.push_str(line);
+            continue;
+        }
         match line.trim().strip_prefix("build: ") {
             Some(dir) => {
                 let pad = " ".repeat(indent);
@@ -281,6 +307,11 @@ mod tests {
             "services:\n  web:\n    build:\n      context: ..\n      dockerfile: deploy/Dockerfile\n    image: web:latest\n  api:\n    build:\n      context: ../api\n"
         );
         assert_eq!(relocate_builds(compose, &dir, &dir, true), compose);
+        let several = "services:\n  api:\n    build:\n      context: .\n      dockerfile: Dockerfile.api\n    image: api:latest\n";
+        assert_eq!(
+            relocate_builds(several, &dir, &out, true),
+            "services:\n  api:\n    build:\n      context: ..\n      dockerfile: deploy/Dockerfile.api\n    image: api:latest\n"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

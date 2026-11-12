@@ -1,0 +1,2 @@
+# Un service Go, compilé en binaire statique : une image de quelques Mo.
+api { go = 1.27-alpine, postgres }

@@ -29,7 +29,9 @@ Un site web complet, en nommant simplement les technologies :
 web { rust nginx postgres redis }
 ```
 
-Un nom seul prend la dernière version stable (nginx 1.30, postgres 18, redis 8…). nginx renvoie
+Votre code peut être en Rust, Go, Node.js, Python, Java (Maven) ou PHP : `web { node nginx postgres }`.
+Un nom seul prend la dernière version stable (Node.js 26, Go 1.27, Python 3.15, nginx 1.30, postgres 18,
+redis 8…). nginx renvoie
 vers l'application, qui reçoit `DATABASE_URL` et `REDIS_URL` ; la base garde ses données (volume,
 StatefulSet Kubernetes) et son mot de passe (`password`, Secret Kubernetes). Sans application,
 `data { postgres redis }` donne juste une base et un cache.
@@ -52,7 +54,7 @@ $ orchestra build app.drc --out deploy
 ## Le guide
 
 Le [guide](https://maxlestage.github.io/ORCHESTRA/guide) explique tout par l'exemple :
-premiers pas (de l'installation au déploiement), quatorze recettes avec les fichiers qu'elles
+premiers pas (de l'installation au déploiement), vingt recettes (Rust, Node.js, Python, Go, Java, PHP…) avec les fichiers qu'elles
 produisent, l'usage des fichiers générés (Compose, Kubernetes, intégration continue), les erreurs
 fréquentes et leur correction, et une FAQ. Les recettes sont aussi dans `examples/recettes/` :
 
@@ -72,6 +74,12 @@ fréquentes et leur correction, et une FAQ. Les recettes sont aussi dans `exampl
 | Plusieurs conteneurs ensemble | `12-plusieurs-conteneurs.drc` |
 | MongoDB et Valkey | `13-mongo-valkey.drc` |
 | Compléter à la main | `14-completer.drc` |
+| Node.js | `15-node.drc` |
+| Python | `16-python.drc` |
+| Go | `17-go.drc` |
+| Java (Maven) | `18-java.drc` |
+| PHP (Apache) | `19-php.drc` |
+| Plusieurs langages dans un projet | `20-plusieurs-langages.drc` |
 
 ## Le site
 

@@ -211,6 +211,85 @@ pub const RECIPES: &[Recipe] = &[
         ],
         run: "$ orchestra build app.drc --out deploy",
     },
+    Recipe {
+        id: "node",
+        title: "Node.js",
+        need: "Une application Node.js derrière nginx, avec PostgreSQL.",
+        file: recipe!("15-node.drc"),
+        source: include_str!("../../examples/recettes/15-node.drc"),
+        notes: &[
+            "<code>node</code> seul : <code>node:26-slim</code> (la LTS actuelle), <code>npm ci</code> (ou <code>npm install</code> sans package-lock.json), puis <code>npm start</code>.",
+            "Votre <code>package.json</code> doit donc avoir un script <code>start</code> ; ou écrivez <code>command = \"node server.js\"</code>.",
+            "<code>NODE_ENV=production</code> et <code>PORT=8080</code> sont donnés à l'application.",
+            "Ajoutez un <code>.dockerignore</code> avec <code>node_modules</code> pour garder l'image propre.",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build",
+    },
+    Recipe {
+        id: "python",
+        title: "Python",
+        need: "Une API Python (FastAPI ou autre), avec son serveur et un cache.",
+        file: recipe!("16-python.drc"),
+        source: include_str!("../../examples/recettes/16-python.drc"),
+        notes: &[
+            "<code>requirements.txt</code> est installé s'il existe.",
+            "Sans <code>command</code>, l'application démarre avec <code>python main.py</code>.",
+            "<code>command</code> se découpe aux espaces : <code>\"uvicorn main:app --port 8080\"</code> devient <code>[\"uvicorn\", \"main:app\", \"--port\", \"8080\"]</code>.",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build",
+    },
+    Recipe {
+        id: "go",
+        title: "Go",
+        need: "Un service Go, le plus léger possible.",
+        file: recipe!("17-go.drc"),
+        source: include_str!("../../examples/recettes/17-go.drc"),
+        notes: &[
+            "Compilé en binaire statique (<code>CGO_ENABLED=0 go build</code>), puis copié seul dans <code>alpine:3.24</code> : quelques Mo.",
+            "Comme pour Rust, l'image d'exécution suit la variante : <code>1.27-bookworm</code> tourne sur <code>debian:bookworm-slim</code>.",
+            "Le programme est construit à la racine du module (<code>go build .</code>).",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build",
+    },
+    Recipe {
+        id: "java",
+        title: "Java",
+        need: "Une application Java construite avec Maven.",
+        file: recipe!("18-java.drc"),
+        source: include_str!("../../examples/recettes/18-java.drc"),
+        notes: &[
+            "Construite avec <code>maven:3-eclipse-temurin-25</code> (<code>mvn package</code>), lancée sur <code>eclipse-temurin:25-jre</code> (Java 25, la LTS actuelle).",
+            "Le JAR produit dans <code>target/</code> est lancé avec <code>java -jar</code> ; un JAR exécutable (Spring Boot, par exemple) est attendu.",
+            "<code>java = 25-alpine</code> utilise les variantes alpine des deux images.",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build",
+    },
+    Recipe {
+        id: "php",
+        title: "PHP",
+        need: "Un site PHP sur Apache, avec sa base MariaDB.",
+        file: recipe!("19-php.drc"),
+        source: include_str!("../../examples/recettes/19-php.drc"),
+        notes: &[
+            "<code>php:8.5-apache</code> sert votre dossier sur le port 80.",
+            "Les extensions de la base de la pile sont installées : <code>pdo_mysql</code> et <code>mysqli</code> pour MySQL ou MariaDB, <code>pdo_pgsql</code> pour PostgreSQL.",
+            "<code>DATABASE_URL</code> est donnée au site, comme dans les autres langages.",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build\n# http://localhost",
+    },
+    Recipe {
+        id: "plusieurs-langages",
+        title: "Plusieurs langages dans un projet",
+        need: "Un front en Node et une API en Go, chacun dans son dossier.",
+        file: recipe!("20-plusieurs-langages.drc"),
+        source: include_str!("../../examples/recettes/20-plusieurs-langages.drc"),
+        notes: &[
+            "Un bloc par application, chacune avec son langage et son dossier (<code>src</code>).",
+            "Chaque application construite reçoit son Dockerfile : <code>Dockerfile.front</code> et <code>Dockerfile.api</code> ; le fichier Compose désigne le bon.",
+            "Une même pile ne construit qu'un langage : deux langages, deux blocs.",
+        ],
+        run: "$ orchestra build app.drc --out deploy\n$ docker compose -f deploy/docker-compose.yml up --build",
+    },
 ];
 
 /// Une erreur fréquente : le fichier fautif, l'explication, le fichier corrigé.
@@ -271,6 +350,12 @@ const MISTAKES: &[Mistake] = &[
         right: "web { image = \"ghcr.io/acme/web:1\", port = 8080, host = \"monsite.fr\" }",
     },
     Mistake {
+        title: "Deux langages dans un même bloc",
+        wrong: "web { node python }",
+        why: "Un bloc construit une seule application : un langage par bloc. Chacun écoute sur 8080 par défaut : donnez un autre port au second.",
+        right: "web { node }\nworker { python, port = 8081 }",
+    },
+    Mistake {
         title: "Une version incomplète",
         wrong: "web { nginx = 1.30- }",
         why: "Une version ne se termine pas par <code>-</code> ou <code>.</code>.",
@@ -282,7 +367,11 @@ const MISTAKES: &[Mistake] = &[
 const FAQ: &[(&str, &str)] = &[
     (
         "Quelle version est prise quand je n'en écris pas ?",
-        "La dernière stable, choisie par le compilateur : nginx 1.30, postgres 18, mysql 26, mariadb 13, mongo 9, redis 8, valkey 9, Rust 1.99. Elle est écrite dans les fichiers générés : vous savez toujours ce qui tourne. Pour la figer, écrivez-la : <code>postgres = 18</code>.",
+        "La dernière stable, choisie par le compilateur : Rust 1.99, Go 1.27, Node.js 26, Python 3.15, Java 25, PHP 8.5, nginx 1.30, postgres 18, mysql 26, mariadb 13, mongo 9, redis 8, valkey 9. Elle est écrite dans les fichiers générés : vous savez toujours ce qui tourne. Pour la figer, écrivez-la : <code>postgres = 18</code>.",
+    ),
+    (
+        "Quels langages sont pris en charge ?",
+        "Rust, Go, Node.js, Python, Java (Maven) et PHP (Apache), chacun avec son Dockerfile : <code>web { node }</code>, <code>api { go = 1.27-alpine }</code>… Pour tout autre langage, construisez votre image vous-même et donnez-la avec <code>image = \"…\"</code>, ou écrivez une section <code>docker</code>.",
     ),
     (
         "Comment choisir alpine, bookworm ou une autre variante ?",
@@ -361,7 +450,7 @@ pub async fn page(_req: Request) -> Page {
         .children(faq());
     layout(
         "Guide",
-        "Le guide de Rust‑Compose : premiers pas, quatorze recettes complètes (site, API, bases, production, versions…), déploiement, erreurs fréquentes et questions.",
+        "Le guide de Rust‑Compose : premiers pas, vingt recettes complètes (Rust, Node.js, Python, Go, Java, PHP, bases, production, versions…), déploiement, erreurs fréquentes et questions.",
         "/guide",
         div()
             .class("wrap doc-layout")

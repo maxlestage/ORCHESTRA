@@ -201,6 +201,11 @@ const CHEATS: &[(&str, &str, &str)] = &[
         "Service Compose, Deployment et Service Kubernetes. Le port des images courantes est déduit (80 pour nginx).",
     ),
     (
+        "Votre langage",
+        "web { node nginx postgres }",
+        "Rust, Go, Node.js, Python, Java ou PHP : le Dockerfile de chacun est écrit pour vous.",
+    ),
+    (
         "Un site complet",
         "web { rust nginx postgres redis }",
         "nginx devant votre code, <code>DATABASE_URL</code> et <code>REDIS_URL</code> fournies, données gardées, mot de passe dans un Secret. Les dernières versions stables, sans rien écrire.",

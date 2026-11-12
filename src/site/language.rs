@@ -154,6 +154,11 @@ fn apps() -> Vec<Node> {
 
 fn stack() -> Vec<Node> {
     let techs: Vec<Vec<String>> = [
+        ("go", "rien (1.27) ou <code>1.27-alpine</code>", "Votre code Go, compilé en binaire statique et lancé sur une image de la même famille (alpine, bookworm, trixie)."),
+        ("node", "rien (26-slim) ou <code>26-alpine</code>", "Votre code Node.js : <code>npm ci</code>, puis <code>npm start</code> (ou <code>command</code>)."),
+        ("python", "rien (3.15-slim) ou <code>3.15-alpine</code>", "Votre code Python : <code>requirements.txt</code> installé, puis <code>python main.py</code> (ou <code>command</code>)."),
+        ("java", "rien (25) ou <code>25-alpine</code>", "Votre code Java : construit avec Maven, lancé avec le JRE de la même version."),
+        ("php", "rien (8.5-apache)", "Votre site PHP sur Apache (port 80), avec les extensions de la base de la pile."),
         ("rust", "rien, <code>\"./api\"</code> ou <code>1.99-alpine</code>", "Votre code : un Dockerfile Rust (le binaire, quel que soit son nom), construit par Compose. <code>\".\"</code> est le dossier du code ; une variante (<code>\"1.99-slim-bookworm\"</code>, <code>\"1.99-alpine\"</code>…) choisit l'image Rust, et l'image d'exécution de la même famille est prise pour vous (<code>src</code> donne alors le dossier). À la place : <code>image = \"…\"</code> pour une application déjà construite."),
         ("nginx", "rien (1.30) ou <code>1.30-alpine</code>", "Devant l'application, sur le port 80 : sa configuration de proxy est écrite pour vous (ConfigMap dans Kubernetes)."),
         ("postgres", "rien (18) ou <code>18-alpine</code>", "<code>DATABASE_URL</code> pour l'application ; données dans un volume (StatefulSet et volume persistant dans Kubernetes)."),
@@ -178,7 +183,7 @@ fn stack() -> Vec<Node> {
     vec![
         h2_id("pile", "Un site web : une pile"),
         para(
-            "Pour un site, nommez les technologies dont vous avez besoin. Un nom seul prend la dernière version stable ; le compilateur relie tout :",
+            "Pour un site, nommez les technologies dont vous avez besoin : un langage (Rust, Go, Node.js, Python, Java ou PHP), et ce qui l'entoure. Un nom seul prend la dernière version stable ; le compilateur relie tout :",
         ),
         drc(include_str!("../../examples/web.drc")),
         para(
