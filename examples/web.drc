@@ -1,7 +1,2 @@
 # Un site web complet : votre code Rust, nginx devant, une base et un cache.
-web {
-    rust     = "."
-    nginx    = "1.29"
-    postgres = "18"
-    redis    = "8"
-}
+web { rust nginx postgres redis }

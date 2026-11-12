@@ -71,7 +71,7 @@ fn how() -> Element {
                     .child(step(
                         art::STEP_WRITE,
                         "Écrire",
-                        "<code>web { image = \"nginx:1.29\" }</code>. Le reste est déduit.",
+                        "<code>web { image = \"nginx:1.30\" }</code>. Le reste est déduit.",
                     ))
                     .child(step(
                         art::STEP_COMPILE,
@@ -197,32 +197,37 @@ fn live(
 const CHEATS: &[(&str, &str, &str)] = &[
     (
         "Une application",
-        r#"web { image = "nginx:1.29" }"#,
+        r#"web { image = "nginx:1.30" }"#,
         "Service Compose, Deployment et Service Kubernetes. Le port des images courantes est déduit (80 pour nginx).",
     ),
     (
         "Un site complet",
-        r#"web { rust = ".", nginx = "1.29", postgres = "18", redis = "8" }"#,
-        "nginx devant votre code, <code>DATABASE_URL</code> et <code>REDIS_URL</code> fournies, données gardées, mot de passe dans un Secret.",
+        "web { rust nginx postgres redis }",
+        "nginx devant votre code, <code>DATABASE_URL</code> et <code>REDIS_URL</code> fournies, données gardées, mot de passe dans un Secret. Les dernières versions stables, sans rien écrire.",
     ),
     (
         "La variante",
-        r#"web { rust = "1.99-alpine", postgres = "18-alpine" }"#,
-        "La valeur est le tag. Pour Rust, l'image d'exécution de la même famille suit : alpine, bookworm…",
+        "web { rust = 1.99-alpine, postgres = 18-alpine }",
+        "Sans guillemets : la valeur est le tag. Pour Rust, l'image d'exécution de la même famille suit : alpine, bookworm…",
     ),
     (
         "La version à part",
-        r#"db { image = "postgres", version = "18" }"#,
+        r#"db { image = "postgres", version = 18 }"#,
         "La même chose que <code>postgres:18</code>, pratique avec une variable : <code>version = API</code>.",
     ),
     (
+        "Juste les services",
+        "data { postgres redis }",
+        "Sans application : une base et un cache, prêts à l'emploi.",
+    ),
+    (
         "Les ports",
-        r#"web { image = "nginx:1.29", port = "8080:80" }"#,
+        r#"web { image = "nginx:1.30", port = "8080:80" }"#,
         "Publié sur 8080, l'application écoute sur 80. Plusieurs : <code>ports = [80, \"8443:443\"]</code>.",
     ),
     (
         "Un nom de domaine",
-        r#"web { image = "nginx:1.29", host = "monsite.fr" }"#,
+        r#"web { image = "nginx:1.30", host = "monsite.fr" }"#,
         "Un Ingress Kubernetes vers l'application.",
     ),
     (
