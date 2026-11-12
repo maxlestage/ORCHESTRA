@@ -1,0 +1,8 @@
+# Toutes les versions en haut du fichier ; à changer ici, ou avec --set.
+#   orchestra build app.drc --set API=2.2.0
+API      = "2.1.0"
+POSTGRES = "18-alpine"
+
+api   { image = "ghcr.io/acme/api", version = API, port = 3000 }
+db    { image = "postgres", version = POSTGRES }
+cache { image = "redis", version = 8 }

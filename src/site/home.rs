@@ -263,6 +263,7 @@ fn cheats() -> Element {
                 div()
                     .class("actions")
                     .child(a().class("btn primary").href("/bac-a-sable").text("Essayer"))
+                    .child(a().class("btn").href("/guide").text("Le guide, par l'exemple"))
                     .child(a().class("btn").href("/langage").text("Toute la spécification")),
             ),
     )

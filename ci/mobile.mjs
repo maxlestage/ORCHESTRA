@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 
 const base = process.argv[2] ?? 'http://localhost:3000';
-const pages = ['/', '/langage', '/bac-a-sable', '/bac-a-sable/erreur', '/bac-a-sable/k8s', '/introuvable'];
+const pages = ['/', '/guide', '/langage', '/bac-a-sable', '/bac-a-sable/erreur', '/bac-a-sable/k8s', '/introuvable'];
 const widths = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440];
 
 // PW_CHANNEL=chrome : le Chrome installé sur la machine (celui des runners GitHub).

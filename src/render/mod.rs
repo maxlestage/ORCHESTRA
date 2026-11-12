@@ -53,11 +53,16 @@ pub fn dot_class(name: &str) -> &'static str {
 
 /// Les fichiers générés, dépliables ; le premier est ouvert.
 pub fn outputs(files: &[GeneratedFile]) -> String {
+    outputs_with(files, true)
+}
+
+/// Les fichiers générés, dépliables ; le premier est ouvert si `open_first`.
+pub fn outputs_with(files: &[GeneratedFile], open_first: bool) -> String {
     let mut html = String::from("<div class=\"outputs\">");
     for (i, file) in files.iter().enumerate() {
         html.push_str(&format!(
             "<details class=\"file\"{}><summary><span class=\"{}\"></span><span>{}</span><span class=\"lines\">{} lignes</span></summary>{}</details>",
-            if i == 0 { " open" } else { "" },
+            if i == 0 && open_first { " open" } else { "" },
             dot_class(&file.name),
             escape(&file.name),
             file.content.lines().count(),

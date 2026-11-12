@@ -32,7 +32,11 @@ pub async fn example(req: Request) -> Page {
             Some(example.id),
             drc::compile_str(example.source),
         ),
-        None => super::missing(),
+        // Les recettes du guide s'ouvrent aussi dans le bac à sable.
+        None => match super::guide::RECIPES.iter().find(|r| r.id == id) {
+            Some(recipe) => render(recipe.source, None, drc::compile_str(recipe.source)),
+            None => super::missing(),
+        },
     }
 }
 

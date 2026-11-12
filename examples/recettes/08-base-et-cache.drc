@@ -1,0 +1,2 @@
+# Pour développer : juste une base et un cache, sans application.
+data { postgres redis }

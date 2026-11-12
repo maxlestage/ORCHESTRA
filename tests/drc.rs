@@ -641,3 +641,15 @@ fn names_alone_and_versions_without_quotes() {
     );
     assert!(error("web { nginx = 1.30- }").contains("version incomplète"));
 }
+
+#[test]
+fn named_volumes_are_declared() {
+    let files =
+        drc::compile_str(include_str!("../examples/recettes/09-microservices.drc")).unwrap();
+    let compose = file(&files, "docker-compose.yml");
+    assert!(compose.contains("\nvolumes:\n  pgdata: {}\n"));
+    // Un chemin n'est pas un volume nommé.
+    let files =
+        drc::compile_str(include_str!("../examples/recettes/01-site-statique.drc")).unwrap();
+    assert!(!file(&files, "docker-compose.yml").contains("\nvolumes:"));
+}

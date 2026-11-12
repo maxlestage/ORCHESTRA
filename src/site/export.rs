@@ -35,16 +35,21 @@ pub async fn export(out: &Path, base: &str, wasm: &Path) -> io::Result<Report> {
     let mut pages: Vec<(String, String, u16)> = vec![
         ("/".into(), "index.html".into(), 200),
         ("/langage".into(), "langage.html".into(), 200),
+        ("/guide".into(), "guide.html".into(), 200),
         ("/bac-a-sable".into(), "bac-a-sable.html".into(), 200),
         // `/bac-a-sable` et le dossier `bac-a-sable/` : GitHub Pages peut rediriger
         // vers le dossier, qui doit alors avoir sa page.
         ("/bac-a-sable".into(), "bac-a-sable/index.html".into(), 200),
         ("/404".into(), "404.html".into(), 404),
     ];
-    for example in examples::ALL {
+    let ids = examples::ALL
+        .iter()
+        .map(|e| e.id)
+        .chain(super::guide::RECIPES.iter().map(|r| r.id));
+    for id in ids {
         pages.push((
-            format!("/bac-a-sable/{}", example.id),
-            format!("bac-a-sable/{}.html", example.id),
+            format!("/bac-a-sable/{id}"),
+            format!("bac-a-sable/{id}.html"),
             200,
         ));
     }

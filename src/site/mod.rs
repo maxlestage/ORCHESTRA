@@ -5,6 +5,7 @@
 mod art;
 mod examples;
 pub mod export;
+mod guide;
 mod home;
 mod language;
 mod sandbox;
@@ -20,6 +21,7 @@ const CSS: &str = include_str!("style.css");
 pub fn app() -> App {
     let mut app = App::new();
     app.get("/", home::page);
+    app.get("/guide", guide::page);
     app.get("/langage", language::page);
     app.get("/bac-a-sable", sandbox::page);
     app.get("/bac-a-sable/:exemple", sandbox::example);
@@ -33,9 +35,9 @@ pub fn app() -> App {
 /// Les pages du menu : (chemin, titre).
 const NAV: &[(&str, &str)] = &[
     ("/#aide-memoire", "Aide‑mémoire"),
+    ("/guide", "Guide"),
     ("/langage", "Langage"),
     ("/bac-a-sable", "Bac à sable"),
-    ("/langage#cli", "CLI"),
 ];
 
 /// La page commune : en-tête, contenu, pied de page.

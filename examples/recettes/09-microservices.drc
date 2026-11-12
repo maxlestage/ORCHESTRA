@@ -1,0 +1,30 @@
+# Un front, une API, un worker et une base, chacun dans son bloc.
+VERSION = "2.1.0"
+fn acme(name) = "ghcr.io/acme/" + name + ":" + VERSION
+
+front {
+    image      = acme("front")
+    port       = "80:3000"          # publié sur 80, écoute sur 3000
+    depends_on = ["api"]
+}
+
+api {
+    image      = acme("api")
+    port       = 8080
+    replicas   = 3
+    env        = { DATABASE_URL = "postgres://app:secret@db:5432/app" }
+    depends_on = ["db"]
+}
+
+worker {
+    image      = acme("worker")
+    replicas   = 2
+    depends_on = ["api"]
+}
+
+db {
+    image   = "postgres"
+    version = 18
+    env     = { POSTGRES_USER = "app", POSTGRES_PASSWORD = "secret" }
+    volumes = ["pgdata:/var/lib/postgresql/data"]
+}
