@@ -592,7 +592,7 @@ details.file[open] .code { animation: unfold .35s ease both; }
 @keyframes nod { 50% { transform: translateY(-2px) rotate(-6deg); } }
 @keyframes unfold { from { opacity: 0; transform: translateY(-6px); } }
 @keyframes appear { to { opacity: 1; } }
-@keyframes reveal { from { opacity: 0; transform: translateY(24px) scale(.98); } }
+@keyframes reveal { from { transform: translateY(16px); } }
 @keyframes slide-in { from { opacity: 0; transform: translateY(-8px); } }
 @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 @keyframes check-draw { from { stroke-dashoffset: 30; } }
