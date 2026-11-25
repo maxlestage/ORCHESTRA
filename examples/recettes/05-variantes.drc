@@ -1,0 +1,7 @@
+# Les mêmes, en images alpine (plus légères), versions choisies.
+web {
+    rust     = 1.99-alpine        # construit sur alpine, tourne sur alpine:3.24
+    nginx    = 1.30-alpine
+    postgres = 18-alpine
+    redis    = 8-alpine
+}

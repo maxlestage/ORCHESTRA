@@ -1,0 +1,9 @@
+# Une API accompagnée d'un proxy et d'un collecteur de journaux, dans le même pod.
+api {
+    image = "ghcr.io/acme/api:2"
+    port  = 3000
+    with  = {
+        proxy = { image = "envoyproxy/envoy", version = "v1.36", port = 9901 }
+        logs  = { image = "fluent/fluent-bit", version = 4.1, env = { LEVEL = "info" } }
+    }
+}

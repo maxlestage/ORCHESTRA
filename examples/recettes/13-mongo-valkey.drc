@@ -1,0 +1,2 @@
+# D'autres bases : MongoDB (MONGODB_URL) et Valkey (REDIS_URL).
+notes { rust mongo valkey }

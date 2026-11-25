@@ -1,0 +1,2 @@
+# Un site PHP sur Apache, avec MariaDB : l'extension pdo_mysql est installée pour vous.
+blog { php mariadb }

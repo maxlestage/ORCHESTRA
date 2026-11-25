@@ -1,0 +1,25 @@
+# Une boutique : un site en Rust, une API et une base de données.
+
+VERSION = "2.1.0"
+fn image(name) = "ghcr.io/acme/" + name + ":" + VERSION
+
+site {
+    build = "rust"                    # → un Dockerfile Rust
+    port = 8080
+    host = "boutique.example.com"     # → un Ingress
+    depends_on = ["api"]
+}
+
+api {
+    image = image("api")
+    port = 3000
+    replicas = 3
+    env = { DATABASE_URL = "postgres://app:secret@db/app" }
+    depends_on = ["db"]
+}
+
+db {
+    image = "postgres:18-alpine"      # port 5432, déduit de l'image
+    env = { POSTGRES_PASSWORD = "secret" }
+    volumes = ["pgdata:/var/lib/postgresql"]
+}

@@ -1,0 +1,94 @@
+# Rust-Compose 1.0
+# Un seul fichier pour les trois cibles : Dockerfile, Compose et Kubernetes.
+
+var IMAGE_NAME = "myapp"
+var VERSION = "1.0.0"
+
+fn image_tag(tag) {
+    return format!("{}:{}", IMAGE_NAME, tag)
+}
+
+docker {
+    base = "rust:1.99-slim"           # image de construction
+    workdir = "/app"
+    copy = [
+        { src = "./src", dst = "src" },
+        { src = "./Cargo.toml", dst = "." }
+    ]
+    build = [
+        "cargo build --release",
+        "cp target/release/myapp ./myapp"
+    ]
+    from = "debian:trixie-slim"       # image finale
+    artifacts = ["myapp"]
+    run = ["./myapp"]
+    expose = ["8080/tcp"]
+}
+
+compose {
+    services = {
+        web = {
+            image = image_tag("latest")
+            ports = ["8080:80"]
+            environment = { "ENV" = "prod" }
+            volumes = ["./data:/data"]
+        }
+        db = {
+            image = "postgres:18-alpine"
+            environment = { "POSTGRES_PASSWORD" = "secret" }
+            volumes = ["./dbdata:/var/lib/postgresql"]
+            ports = ["5432:5432"]
+        }
+    }
+    networks = {
+        default = { driver = "bridge" }
+    }
+}
+
+k8s {
+    deployment = {
+        name = "myapp-deploy"
+        labels = { app = "myapp" }
+        replicas = 3
+        selector = { matchLabels = { app = "myapp" } }
+        template = {
+            metadata = { labels = { app = "myapp" } }
+            spec = {
+                containers = [
+                    {
+                        name = "myapp"
+                        image = image_tag(VERSION)
+                        ports = [{ containerPort = 80 }]
+                        env = [
+                            { name = "ENV", value = "prod" },
+                            { name = "DEBUG", value = "false" }
+                        ]
+                        volumeMounts = [
+                            { name = "data", mountPath = "/app/data" }
+                        ]
+                    }
+                ]
+                volumes = [
+                    { name = "data", emptyDir = {} }
+                ]
+                imagePullSecrets = [{ name = "regcred" }]
+            }
+        }
+    }
+
+    service = {
+        name = "myapp-service"
+        selector = { app = "myapp" }
+        type = "ClusterIP"
+        ports = [
+            { port = 80, targetPort = 80, protocol = "TCP" }
+        ]
+    }
+
+    configmap = {
+        name = "myapp-config"
+        data = {
+            "app.conf" = "log_level=info\n"
+        }
+    }
+}

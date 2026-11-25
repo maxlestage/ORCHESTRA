@@ -1,0 +1,103 @@
+# Teste chaque push. Quand tout est vert, la branche est fusionnée automatiquement
+# dans master (sauf master elle-même et les branches nommées wip/...).
+#
+# - rust : format, clippy, tests (le compilateur Rust-Compose et le site) ;
+# - mobile : le site tourne, et aucune page ne défile horizontalement de 320 à 1440 px ;
+# - merge : la fusion dans master, puis le déploiement sur GitHub Pages (pages.yml) :
+#   un push fait par un workflow ne lance aucun autre workflow, il est donc lancé ici.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Clippy (compilateur du navigateur, wasm32)
+        run: cargo clippy --locked --lib --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo test --locked
+      - name: Exemples (orchestra check et build)
+        run: |
+          cargo run --quiet --locked -- check examples/complet.drc
+          cargo run --quiet --locked -- check examples/versions.drc --set API=9.9.9
+          for recipe in examples/recettes/*.drc; do cargo run --quiet --locked -- check "$recipe"; done
+          cargo run --quiet --locked -- build examples/projet/main.drc --out deploy
+          ls deploy
+
+  mobile:
+    name: Mobile d'abord (aucun défilement horizontal)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - run: cargo build --locked
+      # Le Chrome déjà installé sur les machines GitHub : rien à télécharger.
+      - run: npm install --no-save playwright
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Pages de 320 à 1440 px
+        timeout-minutes: 5
+        run: |
+          PORT=3000 ./target/debug/orchestra &
+          for i in $(seq 1 30); do curl -sf localhost:3000/health && break; sleep 1; done
+          PW_CHANNEL=chrome node ci/mobile.mjs http://localhost:3000
+
+  merge:
+    name: Fusion dans master
+    timeout-minutes: 5
+    needs: [rust, mobile]
+    if: >-
+      github.event_name == 'push' && github.ref_name != 'master' &&
+      !startsWith(github.ref_name, 'wip/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    concurrency:
+      group: merge-into-master
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Fusion de ${{ github.ref_name }}
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge-base --is-ancestor "$SHA" HEAD; then
+            echo "$BRANCH est déjà dans master."
+            exit 0
+          fi
+          git merge --no-ff --no-edit "$SHA" -m "Merge branch '$BRANCH' into master (auto-merge)"
+          git push origin HEAD:master
+      - name: Déploiement sur GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"

@@ -1,0 +1,16 @@
+# Plusieurs images, chacune à sa version.
+# `orchestra build versions.drc --set API=2.2.0` change la version à la compilation.
+
+API = "2.1.0"
+
+api {
+    image = "ghcr.io/acme/api"
+    version = API
+    port = 3000
+    with = {                          # dans le même pod que l'API
+        proxy = { image = "envoyproxy/envoy", version = "v1.36", port = 9901 }
+    }
+}
+
+db    { image = "postgres", version = "18-alpine" }
+cache { image = "redis", version = "8.2" }

@@ -1,0 +1,2 @@
+# Une API en Rust, seule : votre code, construit et publié sur le port 3000.
+api { rust, port = 3000 }

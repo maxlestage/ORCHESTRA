@@ -1,0 +1,2 @@
+# Une application Java (Maven), construite avec le JDK, lancée avec le JRE.
+svc { java, postgres, port = 8080 }

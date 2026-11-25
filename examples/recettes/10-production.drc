@@ -1,0 +1,15 @@
+# En production : un domaine, trois instances, un mot de passe fourni à la compilation.
+#   orchestra build production.drc --out deploy --set PASSWORD=…
+PASSWORD = "change-me"
+
+web {
+    rust     = 1.99-slim-bookworm
+    image    = "ghcr.io/acme/web"     # là où l'image construite est publiée
+    version  = 1.0.0
+    nginx
+    postgres
+    redis
+    replicas = 3
+    password = PASSWORD
+    host     = "monsite.fr"
+}

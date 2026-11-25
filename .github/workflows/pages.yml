@@ -1,0 +1,43 @@
+# Publie le site sur GitHub Pages à chaque mise à jour de master. Rien à configurer.
+
+name: GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # Deux jobs, comme le modèle de GitHub : lancé dans le même job juste après l'envoi,
+  # deploy-pages ne trouve parfois pas encore l'archive (« No artifacts named
+  # github-pages were found »).
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: master # la toute dernière version, même juste après une fusion
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo wasm && cargo run -- export dist
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

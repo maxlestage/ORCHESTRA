@@ -1,0 +1,22 @@
+# Rust-Compose 1.0
+import "../config.drc"
+
+k8s {
+    deployment = {
+        name = "myapp-deploy"
+        labels = { app = "myapp" }
+        replicas = 3
+        # `selector` est déduit des labels quand il manque.
+        template = {
+            metadata = { labels = { app = "myapp" } }
+            spec = {
+                containers = [{ name = "myapp", image = image_tag(VERSION), ports = [{ containerPort = 80 }] }]
+            }
+        }
+    }
+    service = {
+        name = "myapp-service"
+        selector = { app = "myapp" }
+        ports = [{ port = 80, targetPort = 80, protocol = "TCP" }]
+    }
+}

@@ -1,0 +1,3 @@
+# Plusieurs langages dans un même projet : un bloc par application.
+front { node = 26-alpine, src = "./front", nginx }
+api   { go = 1.27-alpine, src = "./api", postgres, port = 3000 }

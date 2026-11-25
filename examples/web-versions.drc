@@ -1,0 +1,7 @@
+# Les mêmes, avec les versions et variantes de votre choix (sans guillemets).
+web {
+    rust     = 1.99-alpine
+    nginx    = 1.30-alpine
+    postgres = 18-alpine
+    redis    = 8
+}
